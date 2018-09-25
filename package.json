@@ -8,5 +8,8 @@
     "start": "node app.js"
   },
   "author": "Mikael Stockman",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "websocket": "^1.0.28"
+  }
 }
