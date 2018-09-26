@@ -43,8 +43,8 @@ wsServer.on('request', function(request) {
             
                 if (jsonData.type === 'post_data') {
                     console.log("Received data: " + message.utf8Data)
-                    history.push(jsonData)
-                    history = history.slice(-100);
+                    history.push(jsonData.value)
+                    history = history.slice(-500);
                     
                     for (var i=0; i < clients.length; i++) {
                         clients[i].sendUTF(message.utf8Data);
@@ -69,7 +69,7 @@ wsServer.on('request', function(request) {
         }
         // subscriber disconnected
         connection.on('close', function(connection) {
-            console.log((new Date()) + " Peer " + connection.remoteAddress + " disconnected.");
+            console.log((new Date()) + " Suscriber " + connection.remoteAddress + " disconnected.");
             clients.splice(index, 1);
         });
     }
