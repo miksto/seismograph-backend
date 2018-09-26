@@ -1,7 +1,7 @@
 version: '3'
 services:
   node:
-    image: "node:stretch"
+    build: ./
     user: "node"
     working_dir: /home/node/app
     environment:
@@ -10,13 +10,3 @@ services:
       - ./:/home/node/app
     ports:
       - "3000:3000"
-    command: "npm start"
-
-  # db:
-  #   image: postgres
-  #   environment:
-  #     POSTGRES_PASSWORD: postgres
-  #   ports:
-  #     - "5432:5432"
-
-
