@@ -18,6 +18,7 @@ server.listen(port, hostname, () => {
  * Websocket stuff 
  */
 var history = [ ];
+var historySize = 2000
 var clients = [ ];
 var publisher = null;
 
@@ -44,7 +45,7 @@ wsServer.on('request', function(request) {
                 if (jsonData.type === 'post_data') {
                     console.log("Received data: " + message.utf8Data)
                     history.push(jsonData.value)
-                    history = history.slice(-500);
+                    history = history.slice(-historySize);
                     
                     for (var i=0; i < clients.length; i++) {
                         clients[i].sendUTF(message.utf8Data);
