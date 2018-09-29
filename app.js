@@ -18,7 +18,7 @@ server.listen(port, hostname, () => {
  * Websocket stuff 
  */
 var history = [ ];
-var historySize = 2000
+var historySize = 1000
 var clients = [ ];
 var publisher = null;
 
