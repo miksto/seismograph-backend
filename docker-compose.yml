@@ -1,10 +1,19 @@
 version: '3'
 services:
-  node:
-    build: ./
-    user: "node"
-    working_dir: /home/node/app
-    environment:
-      - NODE_ENV=production
+  socket-server:
+    build:
+      context: ./
+      dockerfile: Dockerfile-socket-server
+    volumes:
+       - "/Users/miksto/www:/home/app/files/"
     ports:
       - "3000:3000"
+  file-server:
+    build:
+      context: ./
+      dockerfile: Dockerfile-file-server
+    volumes:
+       - "/Users/miksto/www:/home/app/files/"
+    ports:
+      - "8080:8080"
+
