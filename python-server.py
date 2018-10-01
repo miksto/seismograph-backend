@@ -25,13 +25,12 @@ def create_folders():
     os.makedirs(image_directory)
 
 def create_stream_from_list(data_list):
-  stream = Stream()
   data = numpy.array(data_list, dtype='int16')
   stats = {'network': 'BW', 'station': 'RJOB', 'location': '',
           'channel': 'WLZ', 'npts': len(data_list), 'sampling_rate': 10,
           'mseed': {'dataquality': 'D'}}
   stats['starttime'] = UTCDateTime()
-  stream.append(Trace(data=data, header=stats))
+  stream = Stream([Trace(data=data, header=stats)])
   return stream
 
 def start_server():
@@ -61,16 +60,16 @@ def save_plot():
     history.clear()
 
 
-def append_value(value):
-  history.append(value)
+def append_values(values):
+  history.extend(values)
   # Every minute
-  if len(history) % 600 == 0:
+  if len(history) > 0 and len(history) % 10 == 0:
     save_plot()
 
 async def socket_handler(websocket, path):
   sockdata = await websocket.recv()
   json_data = json.loads(sockdata)
-  append_value(json_data['value'])
+  append_values(json_data['values'])
 
 create_folders()
 start_server()
