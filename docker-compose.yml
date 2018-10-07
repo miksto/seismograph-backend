@@ -8,12 +8,11 @@ services:
        - "/Users/miksto/www:/home/app/files/"
     ports:
       - "3000:3000"
+  
   file-server:
-    build:
-      context: ./
-      dockerfile: Dockerfile-file-server
+    image: nginx
     volumes:
-       - "/Users/miksto/www:/home/app/files/"
+       - "/Users/miksto/www/images:/usr/share/nginx/html"
     ports:
-      - "8080:8080"
+      - "8080:80"
 
