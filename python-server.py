@@ -82,9 +82,10 @@ def append_values(values):
     save_plot()
 
 async def socket_handler(websocket, path):
-  sockdata = await websocket.recv()
-  json_data = json.loads(sockdata)
-  append_values(json_data['values'])
+  while True:
+    sockdata = await websocket.recv()
+    json_data = json.loads(sockdata)
+    append_values(json_data['values'])
 
 create_folders()
 start_server()
