@@ -12,7 +12,7 @@ services:
   file-server:
     image: nginx
     volumes:
-       - "/Users/miksto/www/images:/usr/share/nginx/html"
+       - "/Users/miksto/www:/usr/share/nginx/html"
     ports:
       - "8080:80"
 
