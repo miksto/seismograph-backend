@@ -92,6 +92,7 @@ def save_day_plot(stream):
                       minmagnitude=4
                       )
     stream.plot(
+      size=(1280, 960),
       outfile=image_file_name,
       events=cat,
       vertical_scaling_range=200,
@@ -102,14 +103,22 @@ def save_day_plot(stream):
 def save_hour_plot(stream):
   image_file_name = image_directory + '/hour_' + str(last_saved_hour) + '.png'
   endtime = stream[0].stats.endtime
-  stream.plot(outfile=image_file_name, starttime=(endtime-60*60), endtime=endtime)
+  stream.plot(
+    size=(1280, 250),
+    outfile=image_file_name,
+    starttime=(endtime-60*60),
+    endtime=endtime)
 
 def save_10_minute_plot(stream):
   # Always create latest.png from last minute
   image_file_name = image_directory + '/latest.png'
   endtime = stream[0].stats.endtime
   starttime = (endtime-(10*60))
-  stream.plot(outfile=image_file_name, starttime=starttime, endtime=endtime)
+  stream.plot(
+    size=(1280, 250),
+    outfile=image_file_name,
+    starttime=starttime, 
+    endtime=endtime)
 
 def save_mseed_file(stream):
   file_name = stream_file_name(stream[0].stats.starttime.datetime.date())
