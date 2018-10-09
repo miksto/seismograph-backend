@@ -80,7 +80,7 @@ def save_day_plot(stream):
   starttime = stream[0].stats.starttime
   endtime = stream[0].stats.endtime
 
-  image_file_name = image_directory + '/day_' + str(starttime.datetime.day) + '.png'
+  image_file_name = image_directory + '/day_' + str(starttime.datetime.day) + '.svg'
   try:
     client = Client("IRIS")
     cat = client.get_events(
@@ -101,7 +101,7 @@ def save_day_plot(stream):
     print("Failed to plot day plot.", e)
 
 def save_hour_plot(stream):
-  image_file_name = image_directory + '/hour_' + str(last_saved_hour) + '.png'
+  image_file_name = image_directory + '/hour_' + str(last_saved_hour) + '.svg'
   endtime = stream[0].stats.endtime
   stream.plot(
     size=(1280, 250),
@@ -111,7 +111,7 @@ def save_hour_plot(stream):
 
 def save_10_minute_plot(stream):
   # Always create latest.png from last minute
-  image_file_name = image_directory + '/latest.png'
+  image_file_name = image_directory + '/latest.svg'
   endtime = stream[0].stats.endtime
   starttime = (endtime-(10*60))
   stream.plot(
