@@ -9,5 +9,6 @@ RUN pip install websockets
 
 # Bundle app source
 COPY python-server.py ./
+COPY stream_plotter.py ./
 
 CMD [ "python", "python-server.py" ]
