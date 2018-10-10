@@ -1,32 +1,27 @@
 import asyncio
 import websockets
+from websockets import ConnectionClosed
 import json
 import os
 from pathlib import Path
-
 import numpy
-from obspy import UTCDateTime, read, Trace, Stream, imaging
-from obspy.clients.fdsn import Client
-
+from obspy import UTCDateTime, read, Trace, Stream
 import datetime
+from stream_plotter import StreamPlotter
 
-import matplotlib
-matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
+MSEED_DIRECTORY = 'files/mseed'
+WEB_CLIENT_HISTORY_LENGTH = 200
 
-mseed_directory = 'files/mseed'
-image_directory = 'files/images'
-
+web_clients = set()
 current_stream = None
 last_saved_hour = datetime.datetime.today().hour
 last_saved_minute  = datetime.datetime.today().minute
 
 def create_folders():
-  if not os.path.exists(mseed_directory):
-    os.makedirs(mseed_directory)
-
-  if not os.path.exists(image_directory):
-    os.makedirs(image_directory)
+  if not os.path.exists(MSEED_DIRECTORY):
+    os.makedirs(MSEED_DIRECTORY)
+  
+  StreamPlotter.create_dirs()
 
 def create_new_stream():
   data = numpy.array([], dtype='int16')
@@ -40,7 +35,7 @@ def create_new_stream():
   return stream
 
 def stream_file_name(date):
-  return mseed_directory + '/day_' + str(date.day) + '.mseed'
+  return MSEED_DIRECTORY + '/day_' + str(date.day) + '.mseed'
 
 def is_stream_date_correct(stream):
   current_date = datetime.datetime.today().date()
@@ -76,51 +71,6 @@ def start_server():
   asyncio.get_event_loop().run_until_complete(start_server)
   asyncio.get_event_loop().run_forever()
 
-async def save_day_plot(stream):
-  starttime = stream[0].stats.starttime
-  endtime = stream[0].stats.endtime
-
-  image_file_name = image_directory + '/day_' + str(starttime.datetime.day) + '.svg'
-  try:
-    client = Client("IRIS")
-    cat = client.get_events(
-                      starttime=starttime,
-                      endtime=endtime,
-                      latitude=35.6895,
-                      longitude=139.6917,
-                      maxradius=10,
-                      minmagnitude=4
-                      )
-    stream.plot(
-      size=(1280, 960),
-      type="dayplot", 
-      outfile=image_file_name,
-      events=cat,
-      vertical_scaling_range=200,
-      )
-  except Exception as e:
-    print("Failed to plot day plot.", e)
-
-async def save_hour_plot(stream):
-  image_file_name = image_directory + '/hour_' + str(last_saved_hour) + '.svg'
-  endtime = stream[0].stats.endtime
-  stream.plot(
-    size=(1280, 250),
-    outfile=image_file_name,
-    starttime=(endtime-60*60),
-    endtime=endtime)
-
-async def save_10_minute_plot(stream):
-  # Always create latest.png from last minute
-  image_file_name = image_directory + '/latest.svg'
-  endtime = stream[0].stats.endtime
-  starttime = (endtime-(10*60))
-  stream.plot(
-    size=(1280, 250),
-    outfile=image_file_name,
-    starttime=starttime, 
-    endtime=endtime)
-
 async def save_mseed_file(stream):
   file_name = stream_file_name(stream[0].stats.starttime.datetime.date())
   stream.write(file_name)
@@ -137,6 +87,7 @@ async def append_values(values):
 
   # Plot graphs and save data to file
   await save_plots_and_mseed(stream)
+  await publish_data_to_webclients(values)
 
 async def save_plots_and_mseed(stream):
   global current_stream, last_saved_hour, last_saved_minute
@@ -145,23 +96,57 @@ async def save_plots_and_mseed(stream):
   current_hour = datetime.datetime.today().hour
 
   if last_saved_minute != current_minute:
-    await save_10_minute_plot(stream)
+    await StreamPlotter.save_10_minute_plot(stream)
     await save_mseed_file(stream)
     last_saved_minute = current_minute
 
   if last_saved_hour != current_hour:
-    await save_hour_plot(stream)
+    await StreamPlotter.save_hour_plot(stream, last_saved_hour)
     last_saved_hour = current_hour
 
   if not is_stream_date_correct(stream):
-    await save_day_plot(stream)
+    await StreamPlotter.save_day_plot(stream)
     current_stream = create_new_stream()
     current_stream.write(stream_file_name(datetime.datetime.today().date()))
 
+def register_web_client(websocket):
+  print("Registering client")
+  web_clients.add(websocket)
+
+def unregister_web_client(websocket):
+  print("Unregistering client")
+  web_clients.remove(websocket)
+
+async def publish_data_to_webclients(values):
+  old_connections = set()
+  for client in web_clients:
+    try:
+      message = json.dumps({'type': 'data', 'values': values})
+      await client.send(message)
+    except ConnectionClosed:
+      old_connections.add(client)
+
+  for client in old_connections:
+    unregister_web_client(client)
+
+async def send_history(websocket):
+  message = json.dumps({
+    'type': 'data',
+    'values': get_current_stream()[0].data.tolist()[-WEB_CLIENT_HISTORY_LENGTH:]
+  })
+  await websocket.send(message)
+
 async def socket_handler(websocket, path):
-  async for message in websocket:
-    json_data = json.loads(message)
-    await append_values(json_data['values'])
+  if path == '/web-client':
+    register_web_client(websocket)
+    await send_history(websocket)
+    # Keep to websocket open
+    while True:
+        message = await websocket.recv()
+  else:
+    async for message in websocket:
+      json_data = json.loads(message)
+      await append_values(json_data['values'])
 
 create_folders()
 start_server()
