@@ -76,7 +76,7 @@ def start_server():
   asyncio.get_event_loop().run_until_complete(start_server)
   asyncio.get_event_loop().run_forever()
 
-def save_day_plot(stream):
+async def save_day_plot(stream):
   starttime = stream[0].stats.starttime
   endtime = stream[0].stats.endtime
 
@@ -101,7 +101,7 @@ def save_day_plot(stream):
   except Exception as e:
     print("Failed to plot day plot.", e)
 
-def save_hour_plot(stream):
+async def save_hour_plot(stream):
   image_file_name = image_directory + '/hour_' + str(last_saved_hour) + '.svg'
   endtime = stream[0].stats.endtime
   stream.plot(
@@ -110,7 +110,7 @@ def save_hour_plot(stream):
     starttime=(endtime-60*60),
     endtime=endtime)
 
-def save_10_minute_plot(stream):
+async def save_10_minute_plot(stream):
   # Always create latest.png from last minute
   image_file_name = image_directory + '/latest.svg'
   endtime = stream[0].stats.endtime
@@ -121,11 +121,11 @@ def save_10_minute_plot(stream):
     starttime=starttime, 
     endtime=endtime)
 
-def save_mseed_file(stream):
+async def save_mseed_file(stream):
   file_name = stream_file_name(stream[0].stats.starttime.datetime.date())
   stream.write(file_name)
 
-def append_values(values):
+async def append_values(values):
   stream = get_current_stream()
   data = numpy.array(values, dtype='int16')
   stream[0].data = numpy.append(stream[0].data, data)
@@ -136,33 +136,32 @@ def append_values(values):
   stream[0].stats.sampling_rate = sampling_rate
 
   # Plot graphs and save data to file
-  save_plots_and_mseed(stream)
+  await save_plots_and_mseed(stream)
 
-def save_plots_and_mseed(stream):
+async def save_plots_and_mseed(stream):
   global current_stream, last_saved_hour, last_saved_minute
 
   current_minute = datetime.datetime.today().minute
   current_hour = datetime.datetime.today().hour
 
   if last_saved_minute != current_minute:
-    save_10_minute_plot(stream)
-    save_mseed_file(stream)
+    await save_10_minute_plot(stream)
+    await save_mseed_file(stream)
     last_saved_minute = current_minute
 
   if last_saved_hour != current_hour:
-    save_hour_plot(stream)
+    await save_hour_plot(stream)
     last_saved_hour = current_hour
 
   if not is_stream_date_correct(stream):
-    save_day_plot(stream)
+    await save_day_plot(stream)
     current_stream = create_new_stream()
     current_stream.write(stream_file_name(datetime.datetime.today().date()))
 
 async def socket_handler(websocket, path):
-  while True:
-    sockdata = await websocket.recv()
-    json_data = json.loads(sockdata)
-    append_values(json_data['values'])
+  async for message in websocket:
+    json_data = json.loads(message)
+    await append_values(json_data['values'])
 
 create_folders()
 start_server()
