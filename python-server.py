@@ -93,6 +93,7 @@ def save_day_plot(stream):
                       )
     stream.plot(
       size=(1280, 960),
+      type="dayplot", 
       outfile=image_file_name,
       events=cat,
       vertical_scaling_range=200,
@@ -155,7 +156,7 @@ def save_plots_and_mseed(stream):
   if not is_stream_date_correct(stream):
     save_day_plot(stream)
     current_stream = create_new_stream()
-    current_stream.write(stream_file_name(datetime.datetime.today().date))
+    current_stream.write(stream_file_name(datetime.datetime.today().date()))
 
 async def socket_handler(websocket, path):
   while True:
