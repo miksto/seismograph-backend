@@ -17,9 +17,8 @@ class StreamPlotter:
                       endtime=endtime,
                       latitude=35.6895,
                       longitude=139.6917,
-                      maxradius=10,
-                      minmagnitude=4,
-                      maxmagnitude=7
+                      maxradius=15,
+                      maxmagnitude=6
                       )
     except Exception as e:
       print(e)
@@ -31,7 +30,7 @@ class StreamPlotter:
       return client.get_events(
                       starttime=starttime,
                       endtime=endtime,
-                      minmagnitude=7
+                      minmagnitude=6
                       )
     except Exception as e:
       print(e)
@@ -59,7 +58,7 @@ class StreamPlotter:
         type="dayplot", 
         outfile=image_file_name,
         events=cat,
-        vertical_scaling_range=200,
+        vertical_scaling_range=50,
         )
     except Exception as e:
       print("Failed to plot day plot.", e)
