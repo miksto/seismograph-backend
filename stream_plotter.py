@@ -1,5 +1,5 @@
 import os
-from obspy import UTCDateTime, read, Trace, Stream, imaging
+from obspy import UTCDateTime, read, Trace, Stream, Catalog
 from obspy.clients.fdsn import Client
 
 import matplotlib
@@ -8,6 +8,34 @@ import matplotlib.pyplot as plt
 IMAGE_DIRECTORY = 'files/images'
 
 class StreamPlotter:
+
+  @staticmethod
+  def get_japan_earthquakes(client, starttime, endtime):
+    try:
+      return client.get_events(
+                      starttime=starttime,
+                      endtime=endtime,
+                      latitude=35.6895,
+                      longitude=139.6917,
+                      maxradius=10,
+                      minmagnitude=4,
+                      maxmagnitude=7
+                      )
+    except Exception as e:
+      print(e)
+      return Catalog()
+  
+  @staticmethod
+  def get_global_earthquakes(client, starttime, endtime):
+    try:
+      return client.get_events(
+                      starttime=starttime,
+                      endtime=endtime,
+                      minmagnitude=7
+                      )
+    except Exception as e:
+      print(e)
+      return Catalog()
   
   @staticmethod
   def create_dirs():
@@ -18,18 +46,14 @@ class StreamPlotter:
   async def save_day_plot(stream):
     starttime = stream[0].stats.starttime
     endtime = stream[0].stats.endtime
-
+    print("Plotting day plot for stream with starttime:", starttime)
     image_file_name = IMAGE_DIRECTORY + '/day_' + str(starttime.datetime.day) + '.svg'
+
     try:
       client = Client("IRIS")
-      cat = client.get_events(
-                        starttime=starttime,
-                        endtime=endtime,
-                        latitude=35.6895,
-                        longitude=139.6917,
-                        maxradius=10,
-                        minmagnitude=4
-                        )
+      cat = StreamPlotter.get_japan_earthquakes(client, starttime, endtime)
+      cat += StreamPlotter.get_global_earthquakes(client, starttime, endtime)
+        
       stream.plot(
         size=(1280, 960),
         type="dayplot", 
