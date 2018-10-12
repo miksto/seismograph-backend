@@ -10,7 +10,9 @@ services:
       - "3000:3000"
   
   file-server:
-    image: nginx
+    build:
+      context: ./
+      dockerfile: Dockerfile-nginx
     volumes:
        - "/Users/miksto/www:/usr/share/nginx/html"
     ports:
