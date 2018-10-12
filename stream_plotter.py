@@ -46,7 +46,7 @@ class StreamPlotter:
     starttime = stream[0].stats.starttime
     endtime = stream[0].stats.endtime
     print("Plotting day plot for stream with starttime:", starttime)
-    image_file_name = IMAGE_DIRECTORY + '/day_' + str(starttime.datetime.day) + '.svg'
+    image_file_name = IMAGE_DIRECTORY + '/day_' + str(starttime.datetime.day) + '.svgz'
 
     try:
       client = Client("IRIS")
@@ -65,7 +65,7 @@ class StreamPlotter:
 
   @staticmethod
   async def save_hour_plot(stream, hour):
-    image_file_name = IMAGE_DIRECTORY + '/hour_' + str(hour) + '.svg'
+    image_file_name = IMAGE_DIRECTORY + '/hour_' + str(hour) + '.svgz'
     endtime = stream[0].stats.endtime
     stream.plot(
       size=(1280, 250),
@@ -76,7 +76,7 @@ class StreamPlotter:
   @staticmethod
   async def save_10_minute_plot(stream):
     # Always create latest.png from last minute
-    image_file_name = IMAGE_DIRECTORY + '/latest.svg'
+    image_file_name = IMAGE_DIRECTORY + '/latest.svgz'
     endtime = stream[0].stats.endtime
     starttime = (endtime-(10*60))
     stream.plot(
