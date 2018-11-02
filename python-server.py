@@ -69,7 +69,8 @@ class SeismoServer:
       self.unregister_web_client(client)
 
   async def send_history(self, websocket):
-    data_list = self.stream_manager.get_wrapped_stream()[0].data.tolist()
+    stream = await self.stream_manager.get_wrapped_stream()
+    data_list = stream[0].data.tolist()
     message = json.dumps({
       'type': 'data',
       'values': data_list[-WEB_CLIENT_HISTORY_LENGTH:]
