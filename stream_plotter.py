@@ -58,7 +58,7 @@ class StreamPlotter:
         type="dayplot", 
         outfile=image_file_name,
         events=cat,
-        vertical_scaling_range=50,
+        vertical_scaling_range=25,
         )
     except Exception as e:
       print("Failed to plot day plot.", e)
