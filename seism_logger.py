@@ -35,16 +35,23 @@ def on_close(ws):
 def on_open(ws):
     print("### opened ###")
     def run(*args):
-        sleep_time = 0.098
+        sample_avg_count = 6
+        sample_rate = 60
+        sleep_time = 1/sample_rate
         buffer_size = 20
         buffer = [0] * buffer_size
 
         while True:
-            for i in range(0, buffer_size):
-                buffer[i] = mcp.read_adc(0)
-                if i < buffer_size-1:
-                    time.sleep(sleep_time)
             
+            for i in range(0, buffer_size):
+                tmp_value_sum = 0
+                for j in range(0, sample_avg_count):
+                    tmp_value_sum += mcp.read_adc(0)
+                    if j < sample_avg_count-1:
+                        time.sleep(sleep_time)
+                avg_value = tmp_value_sum / sample_avg_count
+                buffer[i] = avg_value
+
             t1 = datetime.datetime.now()
             data = '{"values": ' + json.dumps(buffer) + ', "type": "post_data"}'
             ws.send(data)
@@ -61,7 +68,7 @@ if __name__ == "__main__":
     #websocket.enableTrace(True)
     while True:
         try:
-            ws = websocket.WebSocketApp("ws://46.101.184.224:3000",
+            ws = websocket.WebSocketApp("ws://128.199.197.181:3000",
                                     on_message = on_message,
                                     on_error = on_error,
                                     on_close = on_close)
