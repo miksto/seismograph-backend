@@ -74,11 +74,23 @@ class StreamPlotter:
       endtime=endtime)
 
   @staticmethod
-  async def save_10_minute_plot(stream):
+  async def save_last_10_minutes_plot(stream):
     # Always create latest.png from last minute
-    image_file_name = IMAGE_DIRECTORY + '/latest.svgz'
+    image_file_name = IMAGE_DIRECTORY + '/last_10_minutes.svgz'
     endtime = stream[0].stats.endtime
     starttime = (endtime-(10*60))
+    stream.plot(
+      size=(1280, 250),
+      outfile=image_file_name,
+      starttime=starttime, 
+      endtime=endtime)
+
+  @staticmethod
+  async def save_last_60_minutes_plot(stream):
+    # Always create latest.png from last minute
+    image_file_name = IMAGE_DIRECTORY + '/last_60_minutes.svgz'
+    endtime = stream[0].stats.endtime
+    starttime = (endtime-(60*60))
     stream.plot(
       size=(1280, 250),
       outfile=image_file_name,

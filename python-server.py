@@ -34,7 +34,8 @@ class SeismoServer:
     current_hour = datetime.datetime.today().hour
 
     if self.last_saved_minute != current_minute:
-      await StreamPlotter.save_10_minute_plot(await self.stream_manager.get_wrapped_stream())
+      await StreamPlotter.save_last_10_minutes_plot(await self.stream_manager.get_wrapped_stream())
+      await StreamPlotter.save_last_60_minutes_plot(await self.stream_manager.get_wrapped_stream())
       await self.stream_manager.save_to_file()
       self.last_saved_minute = current_minute
 
