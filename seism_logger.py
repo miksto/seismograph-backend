@@ -61,16 +61,21 @@ def on_open(ws):
         # 2 seconds worth of data
         buffer_size = int(sample_rate/sample_avg_count) * 2
         buffer = [0] * buffer_size
+        avg_list = [0] * 150
 
         while True:
+            rolling_avg = sum(avg_list) / len(avg_list)
             for i in range(0, buffer_size):
                 tmp_value_sum = 0
                 for j in range(0, sample_avg_count):
-                    tmp_value_sum += (mcp.read_adc(2) - 2000)
+                    tmp_value_sum += (mcp.read_adc(2))
                     if j < sample_avg_count-1:
                         time.sleep(sleep_time)
                 avg_value = tmp_value_sum / sample_avg_count
-                buffer[i] = round(avg_value*8)
+                buffer[i] = round((avg_value - rolling_avg) * 8)
+
+                avg_list.pop(0)
+                avg_list.append(avg_value)
 
             t1 = datetime.datetime.now()
             data = '{"values": ' + json.dumps(buffer) + ', "type": "post_data"}'
