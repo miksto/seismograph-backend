@@ -61,15 +61,15 @@ def on_open(ws):
         # 2 seconds worth of data
         buffer_size = int(sample_rate/sample_avg_count) * 2
         buffer = [0] * buffer_size
-        avg_list = [0] * (buffer_size * 60) # 2 minutes
+        avg_list = [0] * (15 * 60)
 
         while True:
             val_count = 0
             for k in avg_list:
                 if k != 0:
                     val_count += 1
-            
-            rolling_avg = sum(avg_list) / val_count if val_count > 0 else 2000
+
+            rolling_avg = sum(avg_list) / val_count if val_count > 0 else mcp.read_adc(2)
             for i in range(0, buffer_size):
                 tmp_value_sum = 0
                 for j in range(0, sample_avg_count):
@@ -77,7 +77,7 @@ def on_open(ws):
                     if j < sample_avg_count-1:
                         time.sleep(sleep_time)
                 avg_value = tmp_value_sum / sample_avg_count
-                buffer[i] = round((avg_value - rolling_avg) * 8)
+                buffer[i] = round((avg_value - rolling_avg) * 4)
 
                 avg_list.pop(0)
                 avg_list.append(avg_value)
