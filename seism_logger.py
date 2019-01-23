@@ -12,7 +12,9 @@ import datetime
 import Adafruit_GPIO.SPI as SPI
 import Adafruit_MCP3008
 
-import sys, signal
+import sys
+from scipy import signal
+import numpy as np
 
 # Software SPI configuration:
 CLK  = 18
@@ -40,6 +42,54 @@ class MCP3208(Adafruit_MCP3008.MCP3008):
         result |= resp[2] >> 5           # MSB has B2:B0 ... need to move down to LSB
         return (result & 0x0FFF)  # ensure we are only sending 12b
 
+class DataFilter(object):
+  zi = None
+  b = None
+  a = None
+
+  def __init__(self, sampling_rate):
+    self.sampling_rate = sampling_rate
+    desired_freq = 1.4
+    desired_freq_nyk = desired_freq * 2
+    wn = desired_freq_nyk / sampling_rate
+    self.b, self.a = signal.butter(3, wn)
+    self.zi = signal.lfilter_zi(self.b, self.a)
+
+  def process(self, data):
+    values, self.zi = signal.lfilter(
+      self.b,
+      self.a,
+      data,
+      zi=self.zi
+    )
+    return values
+
+
+class DataBox(object):
+  max_size = 0
+  decimation_factor = 0
+  data = []
+  filter = None
+
+  def __init__(self, sampling_rate, max_size):
+    target_sampling_rate = 15
+    self.decimation_factor = sampling_rate // target_sampling_rate
+    self.max_size = max_size
+    self.filter = DataFilter(sampling_rate)
+
+  def add(self, data_point):
+    self.data.append(data_point)
+
+  def isFull(self):
+    return len(self.data) >= self.max_size
+
+  def get_filtered_values(self):
+    filtered_data = self.filter.process(self.data)
+    decimated_data = signal.decimate(filtered_data, self.decimation_factor)
+    self.data = []
+    return decimated_data
+
+
 mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
 current_millis = lambda: int(round(time.time() * 1000))
 
@@ -55,13 +105,11 @@ def on_close(ws):
 def on_open(ws):
     print("### opened ###")
     def run(*args):
-        sample_avg_count = 6
-        sample_rate = 90
-        sleep_time = 1/sample_rate
-        # 2 seconds worth of data
-        buffer_size = int(sample_rate/sample_avg_count) * 2
-        buffer = [0] * buffer_size
-        avg_list = [0] * (15 * 60)
+        sample_rate = 250
+        chunk_size = sample_rate * 10
+        sleep_time = 1/(sample_rate/0.8)
+        avg_list = [0] * (sample_rate * 60)
+        data_box = DataBox(sample_rate, chunk_size)
 
         while True:
             val_count = 0
@@ -70,20 +118,21 @@ def on_open(ws):
                     val_count += 1
 
             rolling_avg = sum(avg_list) / val_count if val_count > 0 else mcp.read_adc(2)
-            for i in range(0, buffer_size):
-                tmp_value_sum = 0
-                for j in range(0, sample_avg_count):
-                    tmp_value_sum += mcp.read_adc(2)
-                    if j < sample_avg_count-1:
-                        time.sleep(sleep_time)
-                avg_value = tmp_value_sum / sample_avg_count
-                buffer[i] = round((avg_value - rolling_avg) * 4)
+            while not data_box.isFull():
+                value = mcp.read_adc(2)
+                adj_value = value - rolling_avg
+                data_box.add(adj_value)
+                
+                if not data_box.isFull():
+                    time.sleep(sleep_time)
 
                 avg_list.pop(0)
-                avg_list.append(avg_value)
+                avg_list.append(value)
 
+            values = data_box.get_filtered_values()
+            int_values = np.rint(values*4)
             t1 = datetime.datetime.now()
-            data = '{"values": ' + json.dumps(buffer) + ', "type": "post_data"}'
+            data = '{"values": ' + json.dumps(int_values.tolist()) + ', "type": "post_data"}'
             ws.send(data)
             t2 = datetime.datetime.now()
             adjusted_sleep_time = sleep_time - (t2-t1).total_seconds()
