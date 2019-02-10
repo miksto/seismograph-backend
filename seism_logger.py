@@ -52,7 +52,7 @@ class DataFilter(object):
     desired_freq = 1.4
     desired_freq_nyk = desired_freq * 2
     wn = desired_freq_nyk / sampling_rate
-    self.b, self.a = signal.butter(3, wn)
+    self.b, self.a = signal.butter(4, wn)
     self.zi = signal.lfilter_zi(self.b, self.a)
 
   def process(self, data):
@@ -105,7 +105,7 @@ def on_close(ws):
 def on_open(ws):
     print("### opened ###")
     def run(*args):
-        sample_rate = 250
+        sample_rate = 300
         chunk_size = sample_rate * 10
         sleep_time = 1/(sample_rate/0.8)
         avg_list = [0] * (sample_rate * 60)
