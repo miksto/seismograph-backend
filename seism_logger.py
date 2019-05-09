@@ -89,6 +89,11 @@ class DataBox(object):
     self.data = []
     return decimated_data
 
+  def get_unfiltered_values(self):
+    decimated_data = signal.decimate(self.data, self.decimation_factor)
+    self.data = []
+    return decimated_data
+
 
 mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
 current_millis = lambda: int(round(time.time() * 1000))
@@ -105,7 +110,7 @@ def on_close(ws):
 def on_open(ws):
     print("### opened ###")
     def run(*args):
-        sample_rate = 300
+        sample_rate = 500
         chunk_size = sample_rate * 10
         sleep_time = 1/(sample_rate/0.8)
         avg_list = [0] * (sample_rate * 60)
@@ -120,6 +125,7 @@ def on_open(ws):
             rolling_avg = sum(avg_list) / val_count if val_count > 0 else mcp.read_adc(2)
             while not data_box.isFull():
                 value = mcp.read_adc(2)
+                # value = mcp.read_adc(7)
                 adj_value = value - rolling_avg
                 data_box.add(adj_value)
                 
@@ -130,7 +136,7 @@ def on_open(ws):
                 avg_list.append(value)
 
             values = data_box.get_filtered_values()
-            int_values = np.rint(values*4)
+            int_values = np.rint(values*2)
             t1 = datetime.datetime.now()
             data = '{"values": ' + json.dumps(int_values.tolist()) + ', "type": "post_data"}'
             ws.send(data)
