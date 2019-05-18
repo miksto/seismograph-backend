@@ -3,3 +3,4 @@ latest.svg
 files
 .vscode
 *.pyc
+.env

@@ -8,6 +8,8 @@ services:
        - "/Users/miksto/www:/home/app/files/"
     ports:
       - "3000"
+    env_file:
+      - .env
   
   nginx:
     build:

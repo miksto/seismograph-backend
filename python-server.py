@@ -1,16 +1,34 @@
+import os
 import asyncio
 import websockets
+from http import HTTPStatus
 from websockets import ConnectionClosed
+from websockets.server import WebSocketServerProtocol
+from websockets.exceptions import InvalidHandshake
 import json
 import datetime
 from stream_plotter import StreamPlotter
 from stream_manager import StreamManager
 
 WEB_CLIENT_HISTORY_LENGTH = 200
+WS_CLIENT_PATH = '/ws/web-client'
+WS_DATA_LOGGER_PATH = '/ws/data-logger'
+AUTH_TOKEN_HEADER = 'AUTH_TOKEN'
 
 def create_folders():
   StreamManager.create_dirs()
   StreamPlotter.create_dirs()
+
+class AuthenticatingWebSocket(WebSocketServerProtocol):
+  def process_request(self, path, request_headers):
+    if path not in [WS_CLIENT_PATH, WS_DATA_LOGGER_PATH]:
+      return HTTPStatus.NOT_FOUND, []
+    if path == WS_DATA_LOGGER_PATH and \
+        not request_headers['Authorization'] == os.environ.get(AUTH_TOKEN_HEADER):
+        return HTTPStatus.UNAUTHORIZED, []
+    else:
+      return None
+
   
 class SeismoServer:
 
@@ -20,7 +38,7 @@ class SeismoServer:
   last_saved_minute  = datetime.datetime.today().minute
 
   def start_server(self):
-    start_server = websockets.serve(self.socket_handler, '0.0.0.0', 3000)
+    start_server = websockets.serve(self.socket_handler, '0.0.0.0', 3000, create_protocol=AuthenticatingWebSocket)
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
 
@@ -79,16 +97,21 @@ class SeismoServer:
     await websocket.send(message)
 
   async def socket_handler(self, websocket, path):
-    if path == '/ws/web-client':
+    if path == WS_CLIENT_PATH:
       self.register_web_client(websocket)
       await self.send_history(websocket)
       # Keep to websocket open
       while True:
           message = await websocket.recv()
-    else:
+    elif path == WS_DATA_LOGGER_PATH:
       async for message in websocket:
         json_data = json.loads(message)
         await self.append_values(json_data['values'])
+    else:
+      print("Invalid path", path)
 
-create_folders()
-SeismoServer().start_server()
+if 'AUTH_TOKEN' not in os.environ:
+  print("Missing AUTH_TOKEN as environment variable")
+else:
+  create_folders()
+  SeismoServer().start_server()
