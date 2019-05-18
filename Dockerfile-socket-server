@@ -14,4 +14,4 @@ COPY python-server.py ./
 COPY stream_plotter.py ./
 COPY stream_manager.py ./
 
-CMD [ "python", "python-server.py" ]
+CMD [ "python", "-u", "python-server.py" ]
