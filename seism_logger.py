@@ -153,8 +153,10 @@ def on_open(ws):
 def main_loop():
     while True:
         try:
-            web_socket_url = "ws://" + os.environ.get('API_ENDPOINT') + "/ws"
+            auth_token = os.environ.get('AUTH_TOKEN')
+            web_socket_url = "ws://" + os.environ.get('API_ENDPOINT') + "/ws/data-logger"
             ws = websocket.WebSocketApp(web_socket_url,
+                                    header=["Authorization:" + auth_token],
                                     on_message = on_message,
                                     on_error = on_error,
                                     on_close = on_close)
@@ -168,6 +170,8 @@ def main_loop():
 if __name__ == "__main__":
     #websocket.enableTrace(True)
     if 'API_ENDPOINT' not in os.environ:
-        print("No API_ENDPOINT defined")
+        print("No API_ENDPOINT defined as env var")
+    if 'AUTH_TOKEN' not in os.environ:
+        print("No AUTH_TOKEN defined as env var")
     else: 
         main_loop()
