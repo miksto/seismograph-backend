@@ -7,14 +7,14 @@ services:
     volumes:
        - "/Users/miksto/www:/home/app/files/"
     ports:
-      - "3000:3000"
+      - "3000"
   
-  file-server:
+  nginx:
     build:
       context: ./
       dockerfile: Dockerfile-nginx
     volumes:
-       - "/Users/miksto/www:/usr/share/nginx/html"
+       - "/Users/miksto/www/:/usr/share/nginx/html/"
     ports:
-      - "8080:80"
+      - "80:80"
 

@@ -79,7 +79,7 @@ class SeismoServer:
     await websocket.send(message)
 
   async def socket_handler(self, websocket, path):
-    if path == '/web-client':
+    if path == '/ws/web-client':
       self.register_web_client(websocket)
       await self.send_history(websocket)
       # Keep to websocket open

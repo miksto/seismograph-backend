@@ -7,6 +7,7 @@ import time
 import json
 import random
 import datetime
+import os
 
 # Import SPI library (for hardware SPI) and MCP3008 library.
 import Adafruit_GPIO.SPI as SPI
@@ -149,11 +150,11 @@ def on_open(ws):
         print("thread terminating...")
     thread.start_new_thread(run, ())
 
-if __name__ == "__main__":
-    #websocket.enableTrace(True)
+def main_loop():
     while True:
         try:
-            ws = websocket.WebSocketApp("ws://128.199.197.181:3000",
+            web_socket_url = "ws://" + os.environ.get('API_ENDPOINT') + "/ws"
+            ws = websocket.WebSocketApp(web_socket_url,
                                     on_message = on_message,
                                     on_error = on_error,
                                     on_close = on_close)
@@ -163,3 +164,10 @@ if __name__ == "__main__":
             time.sleep(5)
         except Exception as e:
             print(e)
+
+if __name__ == "__main__":
+    #websocket.enableTrace(True)
+    if 'API_ENDPOINT' not in os.environ:
+        print("No API_ENDPOINT defined")
+    else: 
+        main_loop()
