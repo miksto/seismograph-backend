@@ -114,7 +114,7 @@ def on_open(ws):
         sample_rate = 500
         chunk_size = sample_rate * 10
         sleep_time = 1/(sample_rate/0.2)
-        avg_list = [0] * (sample_rate * 60)
+        avg_list = [0] * (sample_rate * 120)
         data_box = DataBox(sample_rate, chunk_size)
 
         while True:
