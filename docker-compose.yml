@@ -5,18 +5,28 @@ services:
       context: ./
       dockerfile: Dockerfile-socket-server
     volumes:
-       - "/Users/miksto/www:/home/app/files/"
+       - "./nginx/www:/home/app/files/"
     ports:
       - "3000"
     env_file:
       - .env
-  
-  nginx:
-    build:
-      context: ./
-      dockerfile: Dockerfile-nginx
-    volumes:
-       - "/Users/miksto/www/:/usr/share/nginx/html/"
-    ports:
-      - "80:80"
 
+  letsencrypt:
+    image: linuxserver/letsencrypt
+    container_name: letsencrypt
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Tokyo
+      - URL=stockman.se
+      - SUBDOMAINS=api.seismometer.micke,
+      - VALIDATION=http
+      - ONLY_SUBDOMAINS=true
+      - STAGING=false
+    volumes:
+      - ./nginx:/config
+    ports:
+      - 443:443
+      - 80:80
