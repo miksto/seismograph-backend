@@ -154,7 +154,7 @@ def main_loop():
     while True:
         try:
             auth_token = os.environ.get('AUTH_TOKEN')
-            web_socket_url = "ws://" + os.environ.get('API_ENDPOINT') + "/ws/data-logger"
+            web_socket_url = "wss://" + os.environ.get('API_ENDPOINT') + "/ws/data-logger"
             ws = websocket.WebSocketApp(web_socket_url,
                                     header=["Authorization:" + auth_token],
                                     on_message = on_message,
