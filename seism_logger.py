@@ -24,6 +24,7 @@ MOSI = 24
 CS   = 25
 
 class MCP3208(Adafruit_MCP3008.MCP3008):
+    # Modification to support the 12 bits ADC
     def read_adc(self, adc_number):
         """Read the current value of the specified ADC channel (0-7).  The values
         can range from 0 to 1023 (10-bits).
@@ -50,9 +51,10 @@ class DataFilter(object):
 
   def __init__(self, sampling_rate):
     self.sampling_rate = sampling_rate
-    desired_freq = 1.4
-    desired_freq_nyk = desired_freq * 2
-    wn = desired_freq_nyk / sampling_rate
+    nyquist_freq = sampling_rate / 2
+    filter_cutoff_freq = 1.4 #Hz
+    wn = filter_cutoff_freq / nyquist_freq
+
     self.b, self.a = signal.butter(4, wn)
     self.zi = signal.lfilter_zi(self.b, self.a)
 
