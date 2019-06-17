@@ -67,6 +67,30 @@ class DataFilter(object):
     )
     return values
 
+class RollingAverage(object):
+  _avg_list = []
+
+  def __init__(self, max_size):
+    self.max_size = max_size
+
+  def _trim_size(self):
+    if len(self._avg_list) > self.max_size:
+      self._avg_list.pop(0)
+  
+  def add(self, value):
+    self._avg_list.append(value)
+    self._trim_size()
+
+  def is_empty(self):
+    return not self._avg_list
+
+  def get_average(self):
+    current_size = len(self._avg_list)
+    if current_size > 0:
+      return sum(self._avg_list) / current_size
+    else:
+      return 0
+
 
 class DataBox(object):
   max_size = 0
@@ -97,6 +121,64 @@ class DataBox(object):
     self.data = []
     return decimated_data
 
+class DataSampler(object):
+
+  def __init__(self, sample_rate=500, upload_interval=10, rolling_avg_minutes=2, filter=True, on_batch_full=None):
+    avg_list_size = sample_rate * rolling_avg_minutes * 60
+    chunk_size = sample_rate * upload_interval
+    
+    self.filter_data = filter
+    self.on_batch_full = on_batch_full
+    self.sleep_time = 1/(sample_rate/0.2)
+    self.data_box = DataBox(sample_rate, chunk_size)
+    self.rolling_avg = RollingAverage(avg_list_size)
+
+  def run(self):
+    #Init avg with a real value
+    self.rolling_avg.add(mcp.read_adc(2))
+
+    while True:
+        rolling_avg = self.rolling_avg.get_average()
+        while not self.data_box.isFull():
+            value = mcp.read_adc(2)
+            adjusted_value = value - rolling_avg
+            self.data_box.add(adjusted_value)
+            self.rolling_avg.add(value)
+            
+            if not self.data_box.isFull():
+                time.sleep(self.sleep_time)
+
+        t1 = datetime.datetime.now()
+        if self.filter_data:
+          values = self.data_box.get_filtered_values()
+        else:
+          values = self.data_box.get_unfiltered_values()
+
+        self.on_batch_full(values)
+        t2 = datetime.datetime.now()
+        adjusted_sleep_time = self.sleep_time - (t2-t1).total_seconds()
+        if adjusted_sleep_time > 0:
+            time.sleep(adjusted_sleep_time)
+
+class SeismLogger(object):
+
+  def __init__(self, ws):
+    self.ws = ws
+    self.data_sampler = DataSampler(upload_interval=10, filter=True, on_batch_full=self.on_batch_full)
+
+  def upload_data(self, values):
+      int_values = np.rint(values*2)
+      data = '{"values": ' + json.dumps(int_values.tolist()) + ', "type": "post_data"}'
+      self.ws.send(data)
+
+  def on_batch_full(self, values):
+    self.upload_data(values)
+  
+  def run(self, *args):
+    self.data_sampler.run()
+    self.ws.close()
+    print("thread terminating...")
+
 
 mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
 current_millis = lambda: int(round(time.time() * 1000))
@@ -112,45 +194,8 @@ def on_close(ws):
 
 def on_open(ws):
     print("### opened ###")
-    def run(*args):
-        sample_rate = 500
-        chunk_size = sample_rate * 10
-        sleep_time = 1/(sample_rate/0.2)
-        avg_list = [0] * (sample_rate * 120)
-        data_box = DataBox(sample_rate, chunk_size)
-
-        while True:
-            val_count = 0
-            for k in avg_list:
-                if k != 0:
-                    val_count += 1
-
-            rolling_avg = sum(avg_list) / val_count if val_count > 0 else mcp.read_adc(2)
-            while not data_box.isFull():
-                value = mcp.read_adc(2)
-                # value = mcp.read_adc(7)
-                adj_value = value - rolling_avg
-                data_box.add(adj_value)
-                
-                if not data_box.isFull():
-                    time.sleep(sleep_time)
-
-                avg_list.pop(0)
-                avg_list.append(value)
-
-            values = data_box.get_filtered_values()
-            int_values = np.rint(values*2)
-            t1 = datetime.datetime.now()
-            data = '{"values": ' + json.dumps(int_values.tolist()) + ', "type": "post_data"}'
-            ws.send(data)
-            t2 = datetime.datetime.now()
-            adjusted_sleep_time = sleep_time - (t2-t1).total_seconds()
-            if adjusted_sleep_time > 0:
-                time.sleep(adjusted_sleep_time)
-
-        ws.close()
-        print("thread terminating...")
-    thread.start_new_thread(run, ())
+    seism_logger = SeismLogger(ws)
+    thread.start_new_thread(seism_logger.run, ())
 
 def main_loop():
     while True:
