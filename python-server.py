@@ -10,7 +10,7 @@ import datetime
 from stream_plotter import StreamPlotter
 from stream_manager import StreamManager
 
-WEB_CLIENT_HISTORY_LENGTH = 200
+WEB_CLIENT_HISTORY_LENGTH = 300
 WS_CLIENT_PATH = '/ws/web-client'
 WS_DATA_LOGGER_PATH = '/ws/data-logger'
 AUTH_TOKEN_HEADER = 'AUTH_TOKEN'
