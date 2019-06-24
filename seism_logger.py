@@ -23,6 +23,8 @@ MISO = 23
 MOSI = 24
 CS   = 25
 
+ADC_CHANNEL = 2
+
 class MCP3208(Adafruit_MCP3008.MCP3008):
     # Modification to support the 12 bits ADC
     def read_adc(self, adc_number):
@@ -45,9 +47,6 @@ class MCP3208(Adafruit_MCP3008.MCP3008):
         return (result & 0x0FFF)  # ensure we are only sending 12b
 
 class DataFilter(object):
-  zi = None
-  b = None
-  a = None
 
   def __init__(self, sampling_rate):
     self.sampling_rate = sampling_rate
@@ -93,16 +92,12 @@ class RollingAverage(object):
 
 
 class DataBox(object):
-  max_size = 0
-  decimation_factor = 0
-  data = []
-  filter = None
 
-  def __init__(self, sampling_rate, max_size):
-    target_sampling_rate = 15
-    self.decimation_factor = sampling_rate // target_sampling_rate
+  def __init__(self, sampling_rate, decimated_sampling_rate, max_size):
+    self.decimation_factor = sampling_rate // decimated_sampling_rate
     self.max_size = max_size
     self.filter = DataFilter(sampling_rate)
+    self.data = []
 
   def add(self, data_point):
     self.data.append(data_point)
@@ -123,24 +118,25 @@ class DataBox(object):
 
 class DataSampler(object):
 
-  def __init__(self, sample_rate=500, upload_interval=10, rolling_avg_minutes=2, filter=True, on_batch_full=None):
-    avg_list_size = sample_rate * rolling_avg_minutes * 60
-    chunk_size = sample_rate * upload_interval
+  def __init__(self, sampling_rate=500, decimated_sampling_rate=15, upload_interval=10, rolling_avg_minutes=2, filter=True, on_batch_full=None):
+    avg_list_size = sampling_rate * rolling_avg_minutes * 60
+    chunk_size = sampling_rate * upload_interval
     
     self.filter_data = filter
     self.on_batch_full = on_batch_full
-    self.sleep_time = 1/(sample_rate/0.2)
-    self.data_box = DataBox(sample_rate, chunk_size)
+    self.sleep_time = 1/(sampling_rate/0.2)
+    self.mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
+    self.data_box = DataBox(sampling_rate, decimated_sampling_rate, chunk_size)
     self.rolling_avg = RollingAverage(avg_list_size)
 
   def run(self):
     #Init avg with a real value
-    self.rolling_avg.add(mcp.read_adc(2))
+    self.rolling_avg.add(self.mcp.read_adc(ADC_CHANNEL))
 
     while True:
         rolling_avg = self.rolling_avg.get_average()
         while not self.data_box.isFull():
-            value = mcp.read_adc(2)
+            value = self.mcp.read_adc(ADC_CHANNEL)
             adjusted_value = value - rolling_avg
             self.data_box.add(adjusted_value)
             self.rolling_avg.add(value)
@@ -156,9 +152,30 @@ class DataSampler(object):
 
         self.on_batch_full(values)
         t2 = datetime.datetime.now()
-        adjusted_sleep_time = self.sleep_time - (t2-t1).total_seconds()
+        batch_process_time = (t2-t1).total_seconds()
+        adjusted_sleep_time = self.sleep_time - batch_process_time
         if adjusted_sleep_time > 0:
             time.sleep(adjusted_sleep_time)
+
+def create_web_api_socket(on_open):
+  def on_message(self, ws, message):
+    print(message)
+
+  def on_error(self, ws, error):
+    print(error)
+
+  def on_close(self, ws):
+    print("### closed ###")
+
+  web_socket_url = "wss://" + os.environ.get('API_ENDPOINT') + "/ws/data-logger"
+  auth_token = os.environ.get('AUTH_TOKEN')
+  ws = websocket.WebSocketApp(web_socket_url,
+                          header=["Authorization:" + auth_token],
+                          on_message = on_message,
+                          on_error = on_error,
+                          on_close = on_close,
+                          on_open = on_open)
+  return ws
 
 class SeismLogger(object):
 
@@ -179,35 +196,15 @@ class SeismLogger(object):
     self.ws.close()
     print("thread terminating...")
 
-
-mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
-current_millis = lambda: int(round(time.time() * 1000))
-
-def on_message(ws, message):
-    print(message)
-
-def on_error(ws, error):
-    print(error)
-
-def on_close(ws):
-    print("### closed ###")
-
-def on_open(ws):
-    print("### opened ###")
-    seism_logger = SeismLogger(ws)
-    thread.start_new_thread(seism_logger.run, ())
-
 def main_loop():
+
+    def on_websocket_open(ws):
+      seism_logger = SeismLogger(ws)
+      thread.start_new_thread(seism_logger.run, ())
+
     while True:
         try:
-            auth_token = os.environ.get('AUTH_TOKEN')
-            web_socket_url = "wss://" + os.environ.get('API_ENDPOINT') + "/ws/data-logger"
-            ws = websocket.WebSocketApp(web_socket_url,
-                                    header=["Authorization:" + auth_token],
-                                    on_message = on_message,
-                                    on_error = on_error,
-                                    on_close = on_close)
-            ws.on_open = on_open
+            ws = create_web_api_socket(on_websocket_open)           
             ws.run_forever()
             # Sleep 5 seconds before each attempt to reconnect
             time.sleep(5)
