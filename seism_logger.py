@@ -1,21 +1,18 @@
-import websocket
-try:
-    import thread
-except ImportError:
-    import _thread as thread
-import time
-import json
-import random
 import datetime
+import json
 import os
+import random
+import sys
+import threading
+import time
+
+import numpy as np
+import websocket
+from scipy import signal
 
 # Import SPI library (for hardware SPI) and MCP3008 library.
 import Adafruit_GPIO.SPI as SPI
 import Adafruit_MCP3008
-
-import sys
-from scipy import signal
-import numpy as np
 
 # Software SPI configuration:
 CLK  = 18
@@ -47,7 +44,6 @@ class MCP3208(Adafruit_MCP3008.MCP3008):
         return (result & 0x0FFF)  # ensure we are only sending 12b
 
 class DataFilter(object):
-
   def __init__(self, sampling_rate):
     self.sampling_rate = sampling_rate
     nyquist_freq = sampling_rate / 2
@@ -92,70 +88,125 @@ class RollingAverage(object):
 
 
 class DataBox(object):
-
-  def __init__(self, sampling_rate, decimated_sampling_rate, max_size):
-    self.decimation_factor = sampling_rate // decimated_sampling_rate
+  def __init__(self, max_size):
     self.max_size = max_size
-    self.filter = DataFilter(sampling_rate)
     self.data = []
 
   def add(self, data_point):
     self.data.append(data_point)
 
-  def isFull(self):
+  def is_full(self):
     return len(self.data) >= self.max_size
 
-  def get_filtered_values(self):
-    filtered_data = self.filter.process(self.data)
-    decimated_data = signal.decimate(filtered_data, self.decimation_factor)
+  def get_values(self):
+    return self.data
+
+  def clear(self):
     self.data = []
+
+class DataProcessor(object):
+  def __init__(self, sampling_rate, decimated_sampling_rate, filter_values):
+    self.filter_values = filter_values
+    self.decimation_factor = sampling_rate // decimated_sampling_rate
+    self.filter = DataFilter(sampling_rate)
+
+  def _get_filtered_values(self, values):
+    filtered_data = self.filter.process(values)
+    decimated_data = signal.decimate(filtered_data, self.decimation_factor)
     return decimated_data
 
-  def get_unfiltered_values(self):
-    decimated_data = signal.decimate(self.data, self.decimation_factor)
-    self.data = []
-    return decimated_data
+  def _get_unfiltered_values(self, values):
+      decimated_data = signal.decimate(values, self.decimation_factor)
+      return decimated_data
+
+  def process(self, values):
+    if self.filter_values:
+      return self._get_filtered_values(values)
+    else:
+      return self._get_unfiltered_values(values)
 
 class DataSampler(object):
-
-  def __init__(self, sampling_rate=500, decimated_sampling_rate=15, upload_interval=10, rolling_avg_minutes=2, filter=True, on_batch_full=None):
-    avg_list_size = sampling_rate * rolling_avg_minutes * 60
-    chunk_size = sampling_rate * upload_interval
-    
-    self.filter_data = filter
-    self.on_batch_full = on_batch_full
+  def __init__(self, condition, data_box, sampling_rate, upload_interval, rolling_avg_minutes):
+    avg_list_size = sampling_rate * rolling_avg_minutes * 60    
+    self.condition = condition
     self.sleep_time = 1/(sampling_rate/0.2)
     self.mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
-    self.data_box = DataBox(sampling_rate, decimated_sampling_rate, chunk_size)
     self.rolling_avg = RollingAverage(avg_list_size)
+    self.data_box = data_box
+
+  def fill_data_box(self):
+    rolling_avg = self.rolling_avg.get_average()
+    while not self.data_box.is_full():
+        value = self.mcp.read_adc(ADC_CHANNEL)
+        adjusted_value = value - rolling_avg
+        self.data_box.add(adjusted_value)
+        self.rolling_avg.add(value)
+        
+        if not self.data_box.is_full():
+          time.sleep(self.sleep_time)
 
   def run(self):
     #Init avg with a real value
     self.rolling_avg.add(self.mcp.read_adc(ADC_CHANNEL))
-
     while True:
-        rolling_avg = self.rolling_avg.get_average()
-        while not self.data_box.isFull():
-            value = self.mcp.read_adc(ADC_CHANNEL)
-            adjusted_value = value - rolling_avg
-            self.data_box.add(adjusted_value)
-            self.rolling_avg.add(value)
-            
-            if not self.data_box.isFull():
-                time.sleep(self.sleep_time)
+      with self.condition:
+        self.fill_data_box()
+        self.condition.notify()
+        time.sleep(self.sleep_time)
 
-        t1 = datetime.datetime.now()
-        if self.filter_data:
-          values = self.data_box.get_filtered_values()
-        else:
-          values = self.data_box.get_unfiltered_values()
+class DataUploader(object):
+  def __init__(self, ws, condition, data_box, data_processor):
+    self.ws = ws
+    self.condition = condition
+    self.data_box = data_box
+    self.data_processor = data_processor
 
-        self.on_batch_full(values)
-        t2 = datetime.datetime.now()
-        batch_process_time = (t2-t1).total_seconds()
-        adjusted_sleep_time = self.sleep_time - batch_process_time
-        if adjusted_sleep_time > 0:
-            time.sleep(adjusted_sleep_time)
+  def upload_data(self, values):
+    int_values = np.rint(values*2)
+    data = '{"values": ' + json.dumps(int_values.tolist()) + ', "type": "post_data"}'
+    self.ws.send(data)
+
+  def run(self):
+    while True:
+      with self.condition:
+        self.condition.wait()
+        values = self.data_box.get_values()
+        self.data_box.clear()
+
+      proccessed_values = self.data_processor.process(values)
+      self.upload_data(proccessed_values)
+
+class SeismLogger(object):
+  sampling_rate = 500
+  decimated_sampling_rate = 15
+  batch_size = 10
+  upload_interval = 10
+  rolling_avg_minutes = 2
+  filter_data = True
+  chunk_size = sampling_rate * upload_interval
+  
+  def __init__(self, ws):
+    condition = threading.Condition()
+    data_box = DataBox(self.chunk_size)
+    data_processor = DataProcessor(self.sampling_rate,
+                              self.decimated_sampling_rate, 
+                              self.chunk_size)
+    
+    self.data_sampler = DataSampler(condition, 
+                                data_box, 
+                                self.sampling_rate, 
+                                self.upload_interval, 
+                                self.rolling_avg_minutes)
+    
+    self.data_uploader = DataUploader(ws, condition, data_box, data_processor)
+
+  def start(self):
+    sampler_thread = threading.Thread(target=self.data_sampler.run)
+    uploader_thread = threading.Thread(target=self.data_uploader.run)
+    sampler_thread.daemon = True
+    uploader_thread.daemon = True
+    uploader_thread.start()
+    sampler_thread.start()
 
 def create_web_api_socket(on_open):
   def on_message(self, ws, message):
@@ -177,39 +228,13 @@ def create_web_api_socket(on_open):
                           on_open = on_open)
   return ws
 
-class SeismLogger(object):
-
-  def __init__(self, ws):
-    self.ws = ws
-    self.data_sampler = DataSampler(upload_interval=10, filter=True, on_batch_full=self.on_batch_full)
-
-  def upload_data(self, values):
-      int_values = np.rint(values*2)
-      data = '{"values": ' + json.dumps(int_values.tolist()) + ', "type": "post_data"}'
-      self.ws.send(data)
-
-  def on_batch_full(self, values):
-    self.upload_data(values)
-  
-  def run(self, *args):
-    self.data_sampler.run()
-    self.ws.close()
-    print("thread terminating...")
-
-def main_loop():
-
+def start_seism_logger():
     def on_websocket_open(ws):
       seism_logger = SeismLogger(ws)
-      thread.start_new_thread(seism_logger.run, ())
+      seism_logger.start()
 
-    while True:
-        try:
-            ws = create_web_api_socket(on_websocket_open)           
-            ws.run_forever()
-            # Sleep 5 seconds before each attempt to reconnect
-            time.sleep(5)
-        except Exception as e:
-            print(e)
+    ws = create_web_api_socket(on_websocket_open)           
+    ws.run_forever()
 
 if __name__ == "__main__":
     #websocket.enableTrace(True)
@@ -218,4 +243,4 @@ if __name__ == "__main__":
     if 'AUTH_TOKEN' not in os.environ:
         print("No AUTH_TOKEN defined as env var")
     else: 
-        main_loop()
+        start_seism_logger()
