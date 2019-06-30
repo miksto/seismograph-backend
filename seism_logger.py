@@ -73,11 +73,15 @@ class RollingAverage(object):
 
     def _trim_size(self):
         if len(self._avg_list) > self.max_size:
-            self._avg_list.pop(0)
+            self._avg_list.pop()
 
-    def add(self, value):
-        self._avg_list.append(value)
+    def _add(self, value):
+        self._avg_list.insert(0, value)
         self._trim_size()
+
+    def add_batch(self, values):
+        avg = sum(values) / len(values)
+        self._add(avg)
 
     def is_empty(self):
         return not self._avg_list
@@ -85,7 +89,14 @@ class RollingAverage(object):
     def get_average(self):
         current_size = len(self._avg_list)
         if current_size > 0:
-            return sum(self._avg_list) / current_size
+            val_sum = 0
+            weight_sum = 0
+            for id, val in enumerate(self._avg_list, start=2):
+                weight = 1/id
+                val_sum += weight* val
+                weight_sum += weight
+
+            return val_sum / weight_sum
         else:
             return 0
 
@@ -102,17 +113,18 @@ class DataBox(object):
         return len(self.data) >= self.max_size
 
     def get_values(self):
-        return self.data
+        return np.array(self.data)
 
     def clear(self):
         self.data = []
 
 
 class DataProcessor(object):
-    def __init__(self, sampling_rate, decimated_sampling_rate, filter_values):
+    def __init__(self, sampling_rate, decimated_sampling_rate, rolling_average_size, filter_values):
         self.filter_values = filter_values
         self.decimation_factor = sampling_rate // decimated_sampling_rate
         self.filter = DataFilter(sampling_rate)
+        self.rolling_avg = RollingAverage(rolling_average_size)
 
     def _get_filtered_values(self, values):
         filtered_data = self.filter.process(values)
@@ -124,6 +136,9 @@ class DataProcessor(object):
         return decimated_data
 
     def process(self, values):
+        self.rolling_avg.add_batch(values)
+        values = values - self.rolling_avg.get_average()
+        
         if self.filter_values:
             return self._get_filtered_values(values)
         else:
@@ -131,22 +146,17 @@ class DataProcessor(object):
 
 
 class DataSampler(object):
-    def __init__(self, condition, data_box, sampling_rate, upload_interval, rolling_avg_minutes):
-        avg_list_size = sampling_rate * rolling_avg_minutes * 60
+    def __init__(self, condition, data_box, sampling_rate, upload_interval):
         self.condition = condition
         self.sampling_rate = sampling_rate
         self.sleep_time = 1/(sampling_rate/0.5)
         self.mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
-        self.rolling_avg = RollingAverage(avg_list_size)
         self.data_box = data_box
 
     def fill_data_box(self):
-        rolling_avg = self.rolling_avg.get_average()
         while not self.data_box.is_full():
             value = self.mcp.read_adc(ADC_CHANNEL)
-            adjusted_value = value - rolling_avg
-            self.data_box.add(adjusted_value)
-            self.rolling_avg.add(value)
+            self.data_box.add(value)
 
             if not self.data_box.is_full():
                 time.sleep(self.sleep_time)
@@ -157,8 +167,6 @@ class DataSampler(object):
         self.sleep_time = self.sleep_time * sampling_rate_error_fraction
 
     def run(self):
-        # Init avg with a real value
-        self.rolling_avg.add(self.mcp.read_adc(ADC_CHANNEL))
         while True:
             with self.condition:
                 if self.data_box.is_full():
@@ -202,10 +210,9 @@ class DataUploader(object):
 class SeismLogger(object):
     sampling_rate = 750
     decimated_sampling_rate = 15
-    batch_size = 10
     scale_factor = 8
     upload_interval = 10
-    rolling_avg_minutes = 2
+    rolling_average_size = 5 * 60 / upload_interval #5 minutes rolling average
     filter_values = True
     chunk_size = sampling_rate * upload_interval
 
@@ -214,13 +221,13 @@ class SeismLogger(object):
         data_box = DataBox(self.chunk_size)
         data_processor = DataProcessor(self.sampling_rate,
                                        self.decimated_sampling_rate,
+                                       self.rolling_average_size,
                                        self.filter_values)
 
         self.data_sampler = DataSampler(condition,
                                         data_box,
                                         self.sampling_rate,
-                                        self.upload_interval,
-                                        self.rolling_avg_minutes)
+                                        self.upload_interval)
 
         self.data_uploader = DataUploader(ws,
                                           condition,
