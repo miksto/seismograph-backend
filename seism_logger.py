@@ -135,7 +135,8 @@ class DataSampler(object):
     def __init__(self, condition, data_box, sampling_rate, upload_interval, rolling_avg_minutes):
         avg_list_size = sampling_rate * rolling_avg_minutes * 60
         self.condition = condition
-        self.sleep_time = 1/(sampling_rate/0.2)
+        self.sampling_rate = sampling_rate
+        self.sleep_time = 1/(sampling_rate/0.5)
         self.mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
         self.rolling_avg = RollingAverage(avg_list_size)
         self.data_box = data_box
@@ -151,6 +152,11 @@ class DataSampler(object):
             if not self.data_box.is_full():
                 time.sleep(self.sleep_time)
 
+    def _adjust_sleep_time(self, time_diff):
+        actual_sampling_rate = self.data_box.max_size / (time_diff)
+        sampling_rate_error_fraction = actual_sampling_rate / self.sampling_rate
+        self.sleep_time = self.sleep_time * sampling_rate_error_fraction
+
     def run(self):
         # Init avg with a real value
         self.rolling_avg.add(self.mcp.read_adc(ADC_CHANNEL))
@@ -159,9 +165,11 @@ class DataSampler(object):
                 if self.data_box.is_full():
                     self.condition.wait()
 
+                t1 = time.time()
                 self.fill_data_box()
+                t2 = time.time()
                 self.condition.notify()
-                time.sleep(self.sleep_time)
+                self._adjust_sleep_time(t2-t1)
 
 
 class DataUploader(object):
