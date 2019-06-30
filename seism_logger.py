@@ -50,10 +50,9 @@ class DataFilter(object):
     def __init__(self, sampling_rate):
         self.sampling_rate = sampling_rate
         nyquist_freq = sampling_rate / 2
-        filter_cutoff_freq = 1.4  # Hz
+        filter_cutoff_freq = 1.0  # Hz
         wn = filter_cutoff_freq / nyquist_freq
-
-        self.b, self.a = signal.butter(4, wn)
+        self.b, self.a = signal.butter(2, wn)
         self.zi = signal.lfilter_zi(self.b, self.a)
 
     def process(self, data):
@@ -173,14 +172,15 @@ class DataSampler(object):
 
 
 class DataUploader(object):
-    def __init__(self, ws, condition, data_box, data_processor):
+    def __init__(self, ws, condition, data_box, scale_factor, data_processor):
         self.ws = ws
         self.condition = condition
         self.data_box = data_box
+        self.scale_factor = scale_factor
         self.data_processor = data_processor
 
     def upload_data(self, values):
-        int_values = np.rint(values*2)
+        int_values = np.rint(values * self.scale_factor)
         data = '{"values": ' + \
             json.dumps(int_values.tolist()) + ', "type": "post_data"}'
         self.ws.send(data)
@@ -200,12 +200,13 @@ class DataUploader(object):
 
 
 class SeismLogger(object):
-    sampling_rate = 500
+    sampling_rate = 750
     decimated_sampling_rate = 15
     batch_size = 10
+    scale_factor = 8
     upload_interval = 10
     rolling_avg_minutes = 2
-    filter_data = True
+    filter_values = True
     chunk_size = sampling_rate * upload_interval
 
     def __init__(self, ws):
@@ -213,7 +214,7 @@ class SeismLogger(object):
         data_box = DataBox(self.chunk_size)
         data_processor = DataProcessor(self.sampling_rate,
                                        self.decimated_sampling_rate,
-                                       self.chunk_size)
+                                       self.filter_values)
 
         self.data_sampler = DataSampler(condition,
                                         data_box,
@@ -221,8 +222,11 @@ class SeismLogger(object):
                                         self.upload_interval,
                                         self.rolling_avg_minutes)
 
-        self.data_uploader = DataUploader(
-            ws, condition, data_box, data_processor)
+        self.data_uploader = DataUploader(ws,
+                                          condition,
+                                          data_box,
+                                          self.scale_factor,
+                                          data_processor)
 
     def start(self):
         sampler_thread = threading.Thread(target=self.data_sampler.run)
