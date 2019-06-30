@@ -50,9 +50,9 @@ class DataFilter(object):
     def __init__(self, sampling_rate):
         self.sampling_rate = sampling_rate
         nyquist_freq = sampling_rate / 2
-        filter_cutoff_freq = 1.0  # Hz
+        filter_cutoff_freq = 1.2  # Hz
         wn = filter_cutoff_freq / nyquist_freq
-        self.b, self.a = signal.butter(2, wn)
+        self.b, self.a = signal.butter(4, wn, btype='lowpass')
         self.zi = signal.lfilter_zi(self.b, self.a)
 
     def process(self, data):
