@@ -156,6 +156,9 @@ class DataSampler(object):
         self.rolling_avg.add(self.mcp.read_adc(ADC_CHANNEL))
         while True:
             with self.condition:
+                if self.data_box.is_full():
+                    self.condition.wait()
+
                 self.fill_data_box()
                 self.condition.notify()
                 time.sleep(self.sleep_time)
@@ -177,9 +180,12 @@ class DataUploader(object):
     def run(self):
         while True:
             with self.condition:
-                self.condition.wait()
+                if not self.data_box.is_full():
+                    self.condition.wait()
+
                 values = self.data_box.get_values()
                 self.data_box.clear()
+                self.condition.notify()
 
             proccessed_values = self.data_processor.process(values)
             self.upload_data(proccessed_values)
