@@ -36,16 +36,20 @@ class SeismoServer:
   stream_manager = StreamManager()
   last_saved_hour = datetime.datetime.today().hour
   last_saved_minute  = datetime.datetime.today().minute
+  stats = None
 
   def start_server(self):
     start_server = websockets.serve(self.socket_handler, '0.0.0.0', 3000, create_protocol=AuthenticatingWebSocket)
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
 
-  async def append_values(self, values):
+  async def handle_data(self, data):
+    values = data['values']
+    self.stats = data['stats']
+    
     await self.stream_manager.append_values(values)
     await self.save_plots_and_mseed()
-    await self.publish_data_to_webclients(values)
+    await self.publish_data_to_webclients(values, self.stats)
 
   async def save_plots_and_mseed(self):
     current_minute = datetime.datetime.today().minute
@@ -75,11 +79,15 @@ class SeismoServer:
     print("Unregistering client")
     self.web_clients.remove(websocket)
 
-  async def publish_data_to_webclients(self, values):
+  async def publish_data_to_webclients(self, values, stats):
     old_connections = set()
     for client in self.web_clients:
       try:
-        message = json.dumps({'type': 'data', 'values': values})
+        message = json.dumps({
+          'type': 'data',
+          'values': values,
+          'stats': stats
+          })
         await client.send(message)
       except ConnectionClosed:
         old_connections.add(client)
@@ -92,7 +100,8 @@ class SeismoServer:
     data_list = stream[0].data.tolist()
     message = json.dumps({
       'type': 'data',
-      'values': data_list[-WEB_CLIENT_HISTORY_LENGTH:]
+      'values': data_list[-WEB_CLIENT_HISTORY_LENGTH:],
+      'stats': self.stats
     })
     await websocket.send(message)
 
@@ -106,7 +115,7 @@ class SeismoServer:
     elif path == WS_DATA_LOGGER_PATH:
       async for message in websocket:
         json_data = json.loads(message)
-        await self.append_values(json_data['values'])
+        await self.handle_data(json_data)
     else:
       print("Invalid path", path)
 
