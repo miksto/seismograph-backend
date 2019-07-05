@@ -20,7 +20,8 @@ MISO = 23
 MOSI = 24
 CS = 25
 
-ADC_CHANNEL = 2
+ADC_CHANNEL_COIL = 2
+ADC_CHANNEL_BIAS_POINT = 5
 
 
 class MCP3208(Adafruit_MCP3008.MCP3008):
@@ -93,7 +94,7 @@ class RollingAverage(object):
             weight_sum = 0
             for id, val in enumerate(self._avg_list, start=2):
                 weight = 1/id
-                val_sum += weight* val
+                val_sum += weight * val
                 weight_sum += weight
 
             return val_sum / weight_sum
@@ -105,6 +106,7 @@ class DataBox(object):
     def __init__(self, max_size):
         self.max_size = max_size
         self.data = []
+        self.bias_point = None
 
     def add(self, data_point):
         self.data.append(data_point)
@@ -117,14 +119,15 @@ class DataBox(object):
 
     def clear(self):
         self.data = []
+        self.bias_point = None
 
 
 class DataProcessor(object):
-    def __init__(self, sampling_rate, decimated_sampling_rate, rolling_average_size, filter_values):
+    def __init__(self, sampling_rate, decimated_sampling_rate, rolling_avg, filter_values):
         self.filter_values = filter_values
         self.decimation_factor = sampling_rate // decimated_sampling_rate
         self.filter = DataFilter(sampling_rate)
-        self.rolling_avg = RollingAverage(rolling_average_size)
+        self.rolling_avg = rolling_avg
 
     def _get_filtered_values(self, values):
         filtered_data = self.filter.process(values)
@@ -138,7 +141,7 @@ class DataProcessor(object):
     def process(self, values):
         self.rolling_avg.add_batch(values)
         values = values - self.rolling_avg.get_average()
-        
+
         if self.filter_values:
             return self._get_filtered_values(values)
         else:
@@ -146,16 +149,19 @@ class DataProcessor(object):
 
 
 class DataSampler(object):
-    def __init__(self, condition, data_box, sampling_rate, upload_interval):
+    def __init__(self, condition, data_box, scale_factor, sampling_rate, upload_interval):
         self.condition = condition
         self.sampling_rate = sampling_rate
         self.sleep_time = 1/(sampling_rate/0.5)
         self.mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
         self.data_box = data_box
+        self.scale_factor = scale_factor
 
     def fill_data_box(self):
+        self.data_box.bias_point = self.mcp.read_adc(
+            ADC_CHANNEL_BIAS_POINT) * self.scale_factor
         while not self.data_box.is_full():
-            value = self.mcp.read_adc(ADC_CHANNEL)
+            value = self.mcp.read_adc(ADC_CHANNEL_COIL) * self.scale_factor
             self.data_box.add(value)
 
             if not self.data_box.is_full():
@@ -180,17 +186,32 @@ class DataSampler(object):
 
 
 class DataUploader(object):
-    def __init__(self, ws, condition, data_box, scale_factor, data_processor):
+    def __init__(self, ws, condition, data_box, data_processor, rolling_avg, theoretical_max_value):
         self.ws = ws
         self.condition = condition
         self.data_box = data_box
-        self.scale_factor = scale_factor
         self.data_processor = data_processor
+        self.rolling_avg = rolling_avg
+        self.theoretical_max_value = theoretical_max_value
 
-    def upload_data(self, values):
-        int_values = np.rint(values * self.scale_factor)
-        data = '{"values": ' + \
-            json.dumps(int_values.tolist()) + ', "type": "post_data"}'
+    def upload_data(self, values, bias_point):
+        proccessed_values = self.data_processor.process(values)
+        int_values = np.rint(proccessed_values)
+
+        stats = {
+            'bias_point': bias_point,
+            'theoretical_max_value': self.theoretical_max_value,
+            'rolling_avg': self.rolling_avg.get_average(),
+            'batch_avg': sum(values) / len(values),
+            'batch_min': int(min(values)),
+            'batch_max': int(max(values))
+        }
+        data_obj = {
+            'type': 'post_data',
+            'values': int_values.tolist(),
+            'stats': stats
+        }
+        data = json.dumps(data_obj)
         self.ws.send(data)
 
     def run(self):
@@ -200,11 +221,11 @@ class DataUploader(object):
                     self.condition.wait()
 
                 values = self.data_box.get_values()
+                bias_point = self.data_box.bias_point
                 self.data_box.clear()
                 self.condition.notify()
 
-            proccessed_values = self.data_processor.process(values)
-            self.upload_data(proccessed_values)
+            self.upload_data(values, bias_point)
 
 
 class SeismLogger(object):
@@ -212,28 +233,33 @@ class SeismLogger(object):
     decimated_sampling_rate = 15
     scale_factor = 8
     upload_interval = 10
-    rolling_average_size = 5 * 60 / upload_interval #5 minutes rolling average
-    filter_values = True
+    rolling_average_size = 5 * 60 / upload_interval  # 5 minutes rolling average
+    filter_values = False
     chunk_size = sampling_rate * upload_interval
 
     def __init__(self, ws):
         condition = threading.Condition()
         data_box = DataBox(self.chunk_size)
+        rolling_avg = RollingAverage(self.rolling_average_size)
+        theoretical_max_value = 4096 * self.scale_factor  # 12 bit ADC
+
         data_processor = DataProcessor(self.sampling_rate,
                                        self.decimated_sampling_rate,
-                                       self.rolling_average_size,
+                                       rolling_avg,
                                        self.filter_values)
 
         self.data_sampler = DataSampler(condition,
                                         data_box,
+                                        self.scale_factor,
                                         self.sampling_rate,
                                         self.upload_interval)
 
         self.data_uploader = DataUploader(ws,
                                           condition,
                                           data_box,
-                                          self.scale_factor,
-                                          data_processor)
+                                          data_processor,
+                                          rolling_avg,
+                                          theoretical_max_value)
 
     def start(self):
         sampler_thread = threading.Thread(target=self.data_sampler.run)
