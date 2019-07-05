@@ -123,24 +123,30 @@ class DataBox(object):
 
 
 class DataProcessor(object):
-    def __init__(self, sampling_rate, decimated_sampling_rate, rolling_avg, filter_values):
+    def __init__(self, sampling_rate, decimated_sampling_rate, rolling_avg, filter_values, use_rolling_avg):
         self.filter_values = filter_values
         self.decimation_factor = sampling_rate // decimated_sampling_rate
         self.filter = DataFilter(sampling_rate)
         self.rolling_avg = rolling_avg
+        self.use_rolling_avg = use_rolling_avg
+
+    def _decimate(self, values):
+        return values[::self.decimation_factor]
 
     def _get_filtered_values(self, values):
         filtered_data = self.filter.process(values)
-        decimated_data = signal.decimate(filtered_data, self.decimation_factor)
+        decimated_data = self._decimate(filtered_data)
         return decimated_data
 
     def _get_unfiltered_values(self, values):
-        decimated_data = signal.decimate(values, self.decimation_factor)
+        decimated_data = self._decimate(values)
         return decimated_data
 
     def process(self, values):
         self.rolling_avg.add_batch(values)
-        values = values - self.rolling_avg.get_average()
+
+        if self.use_rolling_avg:
+            values = values - self.rolling_avg.get_average()
 
         if self.filter_values:
             return self._get_filtered_values(values)
@@ -234,7 +240,8 @@ class SeismLogger(object):
     scale_factor = 8
     upload_interval = 10
     rolling_average_size = 5 * 60 / upload_interval  # 5 minutes rolling average
-    filter_values = False
+    filter_values = True
+    use_rolling_avg = True
     chunk_size = sampling_rate * upload_interval
 
     def __init__(self, ws):
@@ -246,7 +253,8 @@ class SeismLogger(object):
         data_processor = DataProcessor(self.sampling_rate,
                                        self.decimated_sampling_rate,
                                        rolling_avg,
-                                       self.filter_values)
+                                       self.filter_values,
+                                       self.use_rolling_avg)
 
         self.data_sampler = DataSampler(condition,
                                         data_box,
