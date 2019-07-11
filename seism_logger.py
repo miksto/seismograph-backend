@@ -107,6 +107,7 @@ class DataBox(object):
         self.max_size = max_size
         self.data = []
         self.bias_point = None
+        self.actual_sampling_rate = None
 
     def add(self, data_point):
         self.data.append(data_point)
@@ -120,6 +121,7 @@ class DataBox(object):
     def clear(self):
         self.data = []
         self.bias_point = None
+        self.actual_sampling_rate = None
 
 
 class DataProcessor(object):
@@ -157,7 +159,7 @@ class DataProcessor(object):
 class DataSampler(object):
     def __init__(self, condition, data_box, scale_factor, sampling_rate, upload_interval):
         self.condition = condition
-        self.sampling_rate = sampling_rate
+        self.target_sampling_rate = sampling_rate
         self.sleep_time = 1/(sampling_rate/0.5)
         self.mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
         self.data_box = data_box
@@ -175,8 +177,9 @@ class DataSampler(object):
 
     def _adjust_sleep_time(self, time_diff):
         actual_sampling_rate = self.data_box.max_size / (time_diff)
-        sampling_rate_error_fraction = actual_sampling_rate / self.sampling_rate
-        self.sleep_time = self.sleep_time * sampling_rate_error_fraction
+        sampling_rate_error_fraction = actual_sampling_rate / self.target_sampling_rate
+        self.sleep_time = (self.sleep_time + (self.sleep_time * sampling_rate_error_fraction))/2
+        self.data_box.actual_sampling_rate = actual_sampling_rate
 
     def run(self):
         while True:
@@ -187,25 +190,28 @@ class DataSampler(object):
                 t1 = time.time()
                 self.fill_data_box()
                 t2 = time.time()
-                self.condition.notify()
                 self._adjust_sleep_time(t2-t1)
+                self.condition.notify()
 
 
 class DataUploader(object):
-    def __init__(self, ws, condition, data_box, data_processor, rolling_avg, theoretical_max_value):
+    def __init__(self, ws, condition, data_box, data_processor, rolling_avg, theoretical_max_value, target_sampling_rate):
         self.ws = ws
         self.condition = condition
         self.data_box = data_box
         self.data_processor = data_processor
         self.rolling_avg = rolling_avg
         self.theoretical_max_value = theoretical_max_value
+        self.target_sampling_rate = target_sampling_rate
 
-    def upload_data(self, values, bias_point):
+    def upload_data(self, values, bias_point, actual_sampling_rate):
         proccessed_values = self.data_processor.process(values)
         int_values = np.rint(proccessed_values)
 
         stats = {
             'bias_point': bias_point,
+            'actual_sampling_rate': actual_sampling_rate,
+            'target_sampling_rate': self.target_sampling_rate,
             'theoretical_max_value': self.theoretical_max_value,
             'rolling_avg': self.rolling_avg.get_average(),
             'batch_avg': sum(values) / len(values),
@@ -228,10 +234,12 @@ class DataUploader(object):
 
                 values = self.data_box.get_values()
                 bias_point = self.data_box.bias_point
+                actual_sampling_rate = self.data_box.actual_sampling_rate
+
                 self.data_box.clear()
                 self.condition.notify()
 
-            self.upload_data(values, bias_point)
+            self.upload_data(values, bias_point, actual_sampling_rate)
 
 
 class SeismLogger(object):
@@ -267,7 +275,8 @@ class SeismLogger(object):
                                           data_box,
                                           data_processor,
                                           rolling_avg,
-                                          theoretical_max_value)
+                                          theoretical_max_value,
+                                          self.sampling_rate)
 
     def start(self):
         sampler_thread = threading.Thread(target=self.data_sampler.run)
