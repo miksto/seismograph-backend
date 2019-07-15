@@ -298,7 +298,7 @@ def create_web_api_socket(on_open):
         print("### closed ###")
 
     web_socket_url = "wss://" + \
-        os.environ.get('API_ENDPOINT') + "/ws/data-logger"
+        os.environ.get('API_ENDPOINT') + "/ws/data-logger?seismometer_id=lehman"
     auth_token = os.environ.get('AUTH_TOKEN')
     ws = websocket.WebSocketApp(web_socket_url,
                                 header=["Authorization:" + auth_token],

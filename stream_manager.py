@@ -1,23 +1,13 @@
-
-import os
 import datetime
 from pathlib import Path
 import numpy
 from obspy import UTCDateTime, read, Trace, Stream
 
-MSEED_DIRECTORY = 'files/mseed'
-
 class StreamManager:
   wrapped_stream = None
 
-  @staticmethod
-  def create_dirs():
-    if not os.path.exists(MSEED_DIRECTORY):
-      os.makedirs(MSEED_DIRECTORY)
-  
-  @staticmethod
-  def _stream_file_name(date):
-    return MSEED_DIRECTORY + '/day_' + str(date.day) + '.mseed'
+  def __init__(self, directory):
+    self.directory = directory
 
   @staticmethod
   def _is_stream_valid_for_current_date(stream):
@@ -37,6 +27,10 @@ class StreamManager:
     stream = Stream([Trace(data=data, header=stats)])
     return stream
 
+  def _stream_file_path(self, date):
+    file_name = 'day_' + str(date.day) + '.mseed'
+    return self.directory / file_name
+
   async def get_wrapped_stream(self):
     if self.wrapped_stream is None:
       await self._init_wrapped_stream()
@@ -54,11 +48,11 @@ class StreamManager:
 
   async def _init_wrapped_stream(self):
     current_date = datetime.datetime.today().date()
-    file_name = StreamManager._stream_file_name(current_date)
+    file_path = self._stream_file_path(current_date)
 
     if self.wrapped_stream is None:
-      if Path(file_name).is_file():
-        stream = read(file_name, dtype='int16')
+      if file_path.exists():
+        stream = read(str(file_path), dtype='int16')
         
         # Stream date must match current date. It could be last month's stream
         if StreamManager._is_stream_valid_for_current_date(stream):
@@ -73,7 +67,7 @@ class StreamManager:
 
   async def save_to_file(self):
     stream_start_date = self.wrapped_stream[0].stats.starttime.datetime.date()
-    file_name = StreamManager._stream_file_name(stream_start_date)
+    file_name = self._stream_file_path(stream_start_date)
     self.wrapped_stream.write(file_name)
 
   def begin_new_stream(self):

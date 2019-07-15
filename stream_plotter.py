@@ -9,6 +9,9 @@ IMAGE_DIRECTORY = 'files/images'
 
 class StreamPlotter:
 
+  def __init__(self, directory):
+    self.directory = directory
+
   @staticmethod
   def get_japan_earthquakes(client, starttime, endtime):
     try:
@@ -35,18 +38,14 @@ class StreamPlotter:
     except Exception as e:
       print(e)
       return Catalog()
-  
-  @staticmethod
-  def create_dirs():
-    if not os.path.exists(IMAGE_DIRECTORY):
-      os.makedirs(IMAGE_DIRECTORY)
 
-  @staticmethod
-  async def save_day_plot(stream):
+  async def save_day_plot(self, stream):
     starttime = stream[0].stats.starttime
     endtime = stream[0].stats.endtime
     print("Plotting day plot for stream with starttime:", starttime)
-    image_file_name = IMAGE_DIRECTORY + '/day_' + str(starttime.datetime.day) + '.svgz'
+    image_file_name = 'day_' + str(starttime.datetime.day) + '.svgz'
+    image_file_path = self.directory / image_file_name
+    
 
     try:
       client = Client("IRIS")
@@ -56,43 +55,43 @@ class StreamPlotter:
       stream.plot(
         size=(1280, 960),
         type="dayplot", 
-        outfile=image_file_name,
+        outfile=image_file_path,
         events=cat,
         vertical_scaling_range=250,
         )
     except Exception as e:
       print("Failed to plot day plot.", e)
 
-  @staticmethod
-  async def save_hour_plot(stream, hour):
-    image_file_name = IMAGE_DIRECTORY + '/hour_' + str(hour) + '.svgz'
+  async def save_hour_plot(self, stream, hour):
+    image_file_name = 'hour_' + str(hour) + '.svgz'
+    image_file_path = self.directory / image_file_name
     endtime = stream[0].stats.endtime
     stream.plot(
       size=(1280, 250),
-      outfile=image_file_name,
+      outfile=image_file_path,
       starttime=(endtime-60*60),
       endtime=endtime)
 
-  @staticmethod
-  async def save_last_10_minutes_plot(stream):
+  async def save_last_10_minutes_plot(self, stream):
     # Always create latest.png from last minute
-    image_file_name = IMAGE_DIRECTORY + '/last_10_minutes.svgz'
+    image_file_name = 'last_10_minutes.svgz'
+    image_file_path = self.directory / image_file_name
     endtime = stream[0].stats.endtime
     starttime = (endtime-(10*60))
     stream.plot(
       size=(1280, 250),
-      outfile=image_file_name,
+      outfile=image_file_path,
       starttime=starttime, 
       endtime=endtime)
 
-  @staticmethod
-  async def save_last_60_minutes_plot(stream):
+  async def save_last_60_minutes_plot(self, stream):
     # Always create latest.png from last minute
-    image_file_name = IMAGE_DIRECTORY + '/last_60_minutes.svgz'
+    image_file_name = 'last_60_minutes.svgz'
+    image_file_path = self.directory / image_file_name
     endtime = stream[0].stats.endtime
     starttime = (endtime-(60*60))
     stream.plot(
       size=(1280, 250),
-      outfile=image_file_name,
+      outfile=image_file_path,
       starttime=starttime, 
       endtime=endtime)

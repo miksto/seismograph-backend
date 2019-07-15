@@ -1,7 +1,9 @@
 import os
 import asyncio
 import websockets
+from pathlib import Path
 from http import HTTPStatus
+from urllib.parse import urlparse, parse_qs
 from websockets import ConnectionClosed
 from websockets.server import WebSocketServerProtocol
 from websockets.exceptions import InvalidHandshake
@@ -9,79 +11,75 @@ import json
 import datetime
 from stream_plotter import StreamPlotter
 from stream_manager import StreamManager
+from seismometer import Seismometer, SEISMOMETER_IDS
 
 WEB_CLIENT_HISTORY_LENGTH = 15*30 #30 seconds at 15 smps
 WS_CLIENT_PATH = '/ws/web-client'
 WS_DATA_LOGGER_PATH = '/ws/data-logger'
+WS_SEISMOMETER_QUERY_PARAM = 'seismometer_id'
 AUTH_TOKEN_HEADER = 'AUTH_TOKEN'
 
-def create_folders():
-  StreamManager.create_dirs()
-  StreamPlotter.create_dirs()
 
 class AuthenticatingWebSocket(WebSocketServerProtocol):
   def process_request(self, path, request_headers):
-    if path not in [WS_CLIENT_PATH, WS_DATA_LOGGER_PATH]:
+    parsed_url = urlparse(path)
+    query_params = parse_qs(parsed_url.query)
+    
+    if parsed_url.path not in [WS_CLIENT_PATH, WS_DATA_LOGGER_PATH]:
       return HTTPStatus.NOT_FOUND, []
-    if path == WS_DATA_LOGGER_PATH and \
-        not request_headers['Authorization'] == os.environ.get(AUTH_TOKEN_HEADER):
+    
+    if WS_SEISMOMETER_QUERY_PARAM not in query_params or \
+      query_params[WS_SEISMOMETER_QUERY_PARAM][0] not in SEISMOMETER_IDS:
+        return HTTPStatus.NOT_FOUND, []
+    
+    if parsed_url.path == WS_DATA_LOGGER_PATH and \
+      not request_headers['Authorization'] == os.environ.get(AUTH_TOKEN_HEADER):
         return HTTPStatus.UNAUTHORIZED, []
-    else:
-      return None
-
+    
+    return None
   
 class SeismoServer:
 
-  web_clients = set()
-  stream_manager = StreamManager()
-  last_saved_hour = datetime.datetime.today().hour
-  last_saved_minute  = datetime.datetime.today().minute
-  stats = None
-
+  seismometers = {}
+  web_clients = {}
+  
   def start_server(self):
+    for seismometer_id in SEISMOMETER_IDS:
+      seismometer = Seismometer(seismometer_id, Path('files/' + seismometer_id))
+      seismometer.create_folders()
+      self.seismometers[seismometer_id] = seismometer
+
     start_server = websockets.serve(self.socket_handler, '0.0.0.0', 3000, create_protocol=AuthenticatingWebSocket)
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
 
-  async def handle_data(self, data):
+  async def handle_data(self, seismometer_id, data):
     values = data['values']
-    self.stats = data['stats']
-    
-    await self.stream_manager.append_values(values)
-    await self.save_plots_and_mseed()
-    await self.publish_data_to_webclients(values, self.stats)
+    stats = data['stats']
 
-  async def save_plots_and_mseed(self):
-    current_minute = datetime.datetime.today().minute
-    current_hour = datetime.datetime.today().hour
+    seismometer = self.seismometers[seismometer_id]
+    await seismometer.handle_data(values, stats)
+    await self.publish_data_to_webclients(seismometer_id, values, stats)
 
-    if self.last_saved_minute != current_minute:
-      await StreamPlotter.save_last_10_minutes_plot(await self.stream_manager.get_wrapped_stream())
-      await StreamPlotter.save_last_60_minutes_plot(await self.stream_manager.get_wrapped_stream())
-      await self.stream_manager.save_to_file()
-      self.last_saved_minute = current_minute
-
-    if self.last_saved_hour != current_hour:
-      await StreamPlotter.save_hour_plot(await self.stream_manager.get_wrapped_stream(), self.last_saved_hour)
-      self.last_saved_hour = current_hour
-
-    if not self.stream_manager.is_valid_for_current_date():
-      await StreamPlotter.save_day_plot(await self.stream_manager.get_wrapped_stream())
-      
-      self.stream_manager.begin_new_stream()
-      await self.stream_manager.save_to_file()
-
-  def register_web_client(self, websocket):
+  def register_web_client(self, seismometer_id, websocket):
     print("Registering client")
-    self.web_clients.add(websocket)
+    
+    if not seismometer_id in self.web_clients.keys():
+      self.web_clients[seismometer_id] = set()
 
-  def unregister_web_client(self, websocket):
+    self.web_clients[seismometer_id].add(websocket)
+
+  def unregister_web_client(self, seismometer_id, websocket):
     print("Unregistering client")
-    self.web_clients.remove(websocket)
+    if seismometer_id in self.web_clients.keys():
+      self.web_clients[seismometer_id].remove(websocket)
 
-  async def publish_data_to_webclients(self, values, stats):
+  async def publish_data_to_webclients(self, seismometer_id, values, stats):
+    if seismometer_id not in self.web_clients.keys():
+      return
+
     old_connections = set()
-    for client in self.web_clients:
+    for client in self.web_clients[seismometer_id]:
       try:
         message = json.dumps({
           'type': 'data',
@@ -93,34 +91,38 @@ class SeismoServer:
         old_connections.add(client)
 
     for client in old_connections:
-      self.unregister_web_client(client)
+      self.unregister_web_client(seismometer_id, client)
 
-  async def send_history(self, websocket):
-    stream = await self.stream_manager.get_wrapped_stream()
+  async def send_history(self, seismometer_id, websocket, history_length=30):
+    seismometer = self.seismometers[seismometer_id]
+    stream = await seismometer.stream_manager.get_wrapped_stream()
     data_list = stream[0].data.tolist()
     message = json.dumps({
       'type': 'data',
       'values': data_list[-WEB_CLIENT_HISTORY_LENGTH:],
-      'stats': self.stats
+      'stats': seismometer.stats
     })
     await websocket.send(message)
 
   async def socket_handler(self, websocket, path):
-    if path == WS_CLIENT_PATH:
-      self.register_web_client(websocket)
-      await self.send_history(websocket)
+    parsed_url = urlparse(path)
+    query_params = parse_qs(parsed_url.query)
+    seismometer_id = query_params[WS_SEISMOMETER_QUERY_PARAM][0]
+
+    if parsed_url.path == WS_CLIENT_PATH:
+      self.register_web_client(seismometer_id, websocket)
+      await self.send_history(seismometer_id, websocket)
       # Keep to websocket open
       while True:
           message = await websocket.recv()
-    elif path == WS_DATA_LOGGER_PATH:
+    elif parsed_url.path == WS_DATA_LOGGER_PATH:
       async for message in websocket:
         json_data = json.loads(message)
-        await self.handle_data(json_data)
+        await self.handle_data(seismometer_id, json_data)
     else:
       print("Invalid path", path)
 
 if 'AUTH_TOKEN' not in os.environ:
   print("Missing AUTH_TOKEN as environment variable")
 else:
-  create_folders()
   SeismoServer().start_server()

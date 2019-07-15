@@ -13,5 +13,6 @@ RUN pip install websockets
 COPY python-server.py ./
 COPY stream_plotter.py ./
 COPY stream_manager.py ./
+COPY seismometer.py ./
 
 CMD [ "python", "-u", "python-server.py" ]
