@@ -13,10 +13,10 @@ from stream_plotter import StreamPlotter
 from stream_manager import StreamManager
 from seismometer import Seismometer, SEISMOMETER_IDS
 
-WEB_CLIENT_HISTORY_LENGTH = 15*30 #30 seconds at 15 smps
 WS_CLIENT_PATH = '/ws/web-client'
 WS_DATA_LOGGER_PATH = '/ws/data-logger'
 WS_SEISMOMETER_QUERY_PARAM = 'seismometer_id'
+WS_HISTORY_LENGTH_QUERY_PARAM = 'history_length'
 AUTH_TOKEN_HEADER = 'AUTH_TOKEN'
 
 
@@ -95,11 +95,10 @@ class SeismoServer:
 
   async def send_history(self, seismometer_id, websocket, history_length=30):
     seismometer = self.seismometers[seismometer_id]
-    stream = await seismometer.stream_manager.get_wrapped_stream()
-    data_list = stream[0].data.tolist()
+    data_list = await seismometer.get_last_seconds_of_data(history_length)
     message = json.dumps({
       'type': 'data',
-      'values': data_list[-WEB_CLIENT_HISTORY_LENGTH:],
+      'values': data_list,
       'stats': seismometer.stats
     })
     await websocket.send(message)
@@ -110,8 +109,9 @@ class SeismoServer:
     seismometer_id = query_params[WS_SEISMOMETER_QUERY_PARAM][0]
 
     if parsed_url.path == WS_CLIENT_PATH:
+      history_length = int(query_params[WS_HISTORY_LENGTH_QUERY_PARAM][0])
       self.register_web_client(seismometer_id, websocket)
-      await self.send_history(seismometer_id, websocket)
+      await self.send_history(seismometer_id, websocket, history_length)
       # Keep to websocket open
       while True:
           message = await websocket.recv()

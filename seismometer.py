@@ -35,6 +35,13 @@ class Seismometer(object):
     await self.stream_manager.append_values(values)
     await self.save_plots_and_mseed()
 
+  async def get_last_seconds_of_data(self, seconds):
+    stream = await self.stream_manager.get_wrapped_stream()
+    endtime = stream[0].stats.endtime
+    starttime = endtime-seconds
+    slice = stream.slice(starttime, endtime)
+    return  slice[0].data.tolist() if slice.count() > 0 else []
+
   async def save_plots_and_mseed(self):
     current_minute = datetime.today().minute
     current_hour = datetime.today().hour
