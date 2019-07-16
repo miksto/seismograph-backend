@@ -195,7 +195,7 @@ class DataSampler(object):
 
 
 class DataUploader(object):
-    def __init__(self, ws, condition, data_box, data_processor, rolling_avg, theoretical_max_value, target_sampling_rate):
+    def __init__(self, ws, condition, data_box, data_processor, rolling_avg, theoretical_max_value, target_sampling_rate, decimated_sampling_rate):
         self.ws = ws
         self.condition = condition
         self.data_box = data_box
@@ -203,6 +203,7 @@ class DataUploader(object):
         self.rolling_avg = rolling_avg
         self.theoretical_max_value = theoretical_max_value
         self.target_sampling_rate = target_sampling_rate
+        self.decimated_sampling_rate = decimated_sampling_rate
 
     def upload_data(self, values, bias_point, actual_sampling_rate):
         proccessed_values = self.data_processor.process(values)
@@ -212,6 +213,7 @@ class DataUploader(object):
             'bias_point': bias_point,
             'actual_sampling_rate': actual_sampling_rate,
             'target_sampling_rate': self.target_sampling_rate,
+            'decimated_sampling_rate': self.decimated_sampling_rate,
             'theoretical_max_value': self.theoretical_max_value,
             'rolling_avg': self.rolling_avg.get_average(),
             'batch_avg': sum(values) / len(values),
@@ -276,7 +278,8 @@ class SeismLogger(object):
                                           data_processor,
                                           rolling_avg,
                                           theoretical_max_value,
-                                          self.sampling_rate)
+                                          self.sampling_rate,
+                                          self.decimated_sampling_rate)
 
     def start(self):
         sampler_thread = threading.Thread(target=self.data_sampler.run)
