@@ -14,15 +14,43 @@ from scipy import signal
 import Adafruit_GPIO.SPI as SPI
 import Adafruit_MCP3008
 
-# Software SPI configuration:
-CLK = 18
-MISO = 23
-MOSI = 24
-CS = 25
+SEISMOMETER_ID_LEHMAN = 'lehman'
+SEISMOMETER_ID_VERTICAL_PENDULUM = 'vertical_pendulum'
+SEISMOMETER_IDS = [SEISMOMETER_ID_LEHMAN, SEISMOMETER_ID_VERTICAL_PENDULUM]
 
-ADC_CHANNEL_COIL = 2
-ADC_CHANNEL_BIAS_POINT = 5
+class AdcConfig(object):
+    def __init__(self, seismometer_id):
+        if seismometer_id == SEISMOMETER_ID_LEHMAN: 
+            self.bias_point_channel = 5
+            self.coil_input_channel = 2
+            self.adc_bit_resolution = 12
+            self.CLK = 18
+            self.MISO = 23
+            self.MOSI = 24
+            self.CS = 25
+        elif seismometer_id == SEISMOMETER_ID_VERTICAL_PENDULUM:
+            self.bias_point_channel = None
+            self.coil_input_channel = 7
+            self.adc_bit_resolution = 10
+            self.CLK = 12
+            self.MISO = 16
+            self.MOSI = 20
+            self.CS = 21
+        else:
+            raise print("Invalid seismometer_id provided to AdcConfig")
 
+class SeismometerConfig(object):
+    def __init__(self, seismometer_id):
+        self.sampling_rate = 750
+        self.decimated_sampling_rate = 15
+        self.scale_factor = 8
+        self.upload_interval = 10
+        self.rolling_average_size = 5 * 60 / self.upload_interval  # 5 minutes rolling average
+        self.filter_values = True
+        self.use_rolling_avg = True
+        self.chunk_size = self.sampling_rate * self.upload_interval
+        self.adc_config = AdcConfig(seismometer_id)
+        self.filter_cutoff_freq = 2
 
 class MCP3208(Adafruit_MCP3008.MCP3008):
     # Modification to support the 12 bits ADC
@@ -47,11 +75,31 @@ class MCP3208(Adafruit_MCP3008.MCP3008):
         return (result & 0x0FFF)  # ensure we are only sending 12b
 
 
+class AdcWrapper(object):
+    def __init__(self, config):
+        self.config = config
+        if config.adc_bit_resolution == 12:
+            self.adc = MCP3208(
+                clk=config.CLK, cs=config.CS, miso=config.MISO, mosi=config.MOSI)
+        elif config.adc_bit_resolution == 10:
+            self.adc = Adafruit_MCP3008.MCP3008(
+                clk=config.CLK, cs=config.CS, miso=config.MISO, mosi=config.MOSI)
+        else:
+            print("Unsupported resulution provided to AdcWrapper")
+
+    def supports_bias_point_measurement(self):
+        return self.config.bias_point_channel is not None
+
+    def read_coil(self):
+        return self.adc.read_adc(self.config.coil_input_channel)
+
+    def read_bias_point(self):
+        return self.adc.read_adc(self.config.bias_point_channel)
+
 class DataFilter(object):
-    def __init__(self, sampling_rate):
+    def __init__(self, filter_cutoff_freq, sampling_rate):
         self.sampling_rate = sampling_rate
         nyquist_freq = sampling_rate / 2
-        filter_cutoff_freq = 1.2  # Hz
         wn = filter_cutoff_freq / nyquist_freq
         self.b, self.a = signal.butter(4, wn, btype='lowpass')
         self.zi = signal.lfilter_zi(self.b, self.a)
@@ -125,10 +173,9 @@ class DataBox(object):
 
 
 class DataProcessor(object):
-    def __init__(self, sampling_rate, decimated_sampling_rate, rolling_avg, filter_values, use_rolling_avg):
-        self.filter_values = filter_values
+    def __init__(self, sampling_rate, decimated_sampling_rate, rolling_avg, use_rolling_avg, data_filter):
         self.decimation_factor = sampling_rate // decimated_sampling_rate
-        self.filter = DataFilter(sampling_rate)
+        self.data_filter = data_filter
         self.rolling_avg = rolling_avg
         self.use_rolling_avg = use_rolling_avg
 
@@ -136,7 +183,7 @@ class DataProcessor(object):
         return values[::self.decimation_factor]
 
     def _get_filtered_values(self, values):
-        filtered_data = self.filter.process(values)
+        filtered_data = self.data_filter.process(values)
         decimated_data = self._decimate(filtered_data)
         return decimated_data
 
@@ -150,26 +197,27 @@ class DataProcessor(object):
         if self.use_rolling_avg:
             values = values - self.rolling_avg.get_average()
 
-        if self.filter_values:
+        if self.data_filter is not None:
             return self._get_filtered_values(values)
         else:
             return self._get_unfiltered_values(values)
 
 
 class DataSampler(object):
-    def __init__(self, condition, data_box, scale_factor, sampling_rate, upload_interval):
+    def __init__(self, adc, condition, data_box, scale_factor, sampling_rate, upload_interval):
         self.condition = condition
         self.target_sampling_rate = sampling_rate
         self.sleep_time = 1/(sampling_rate/0.5)
-        self.mcp = MCP3208(clk=CLK, cs=CS, miso=MISO, mosi=MOSI)
+        self.adc = adc
         self.data_box = data_box
         self.scale_factor = scale_factor
 
     def fill_data_box(self):
-        self.data_box.bias_point = self.mcp.read_adc(
-            ADC_CHANNEL_BIAS_POINT) * self.scale_factor
+        if self.adc.supports_bias_point_measurement():
+            self.data_box.bias_point = self.adc.read_bias_point() * self.scale_factor
+
         while not self.data_box.is_full():
-            value = self.mcp.read_adc(ADC_CHANNEL_COIL) * self.scale_factor
+            value = self.adc.read_coil() * self.scale_factor
             self.data_box.add(value)
 
             if not self.data_box.is_full():
@@ -245,32 +293,30 @@ class DataUploader(object):
 
 
 class SeismLogger(object):
-    sampling_rate = 750
-    decimated_sampling_rate = 15
-    scale_factor = 8
-    upload_interval = 10
-    rolling_average_size = 5 * 60 / upload_interval  # 5 minutes rolling average
-    filter_values = True
-    use_rolling_avg = True
-    chunk_size = sampling_rate * upload_interval
-
-    def __init__(self, ws):
+    def __init__(self, config, ws):
         condition = threading.Condition()
-        data_box = DataBox(self.chunk_size)
-        rolling_avg = RollingAverage(self.rolling_average_size)
-        theoretical_max_value = 4096 * self.scale_factor  # 12 bit ADC
+        data_box = DataBox(config.chunk_size)
+        rolling_avg = RollingAverage(config.rolling_average_size)
+        theoretical_max_value = 2**config.adc_config.adc_bit_resolution * config.scale_factor
+        adc = AdcWrapper(config.adc_config)
+        
+        if config.filter_values:
+            data_filter = DataFilter(config.filter_cutoff_freq, config.sampling_rate)
+        else:
+            data_filter = None
 
-        data_processor = DataProcessor(self.sampling_rate,
-                                       self.decimated_sampling_rate,
+        data_processor = DataProcessor(config.sampling_rate,
+                                       config.decimated_sampling_rate,
                                        rolling_avg,
-                                       self.filter_values,
-                                       self.use_rolling_avg)
+                                       config.use_rolling_avg,
+                                       data_filter)
 
-        self.data_sampler = DataSampler(condition,
+        self.data_sampler = DataSampler(adc,
+                                        condition,
                                         data_box,
-                                        self.scale_factor,
-                                        self.sampling_rate,
-                                        self.upload_interval)
+                                        config.scale_factor,
+                                        config.sampling_rate,
+                                        config.upload_interval)
 
         self.data_uploader = DataUploader(ws,
                                           condition,
@@ -278,8 +324,8 @@ class SeismLogger(object):
                                           data_processor,
                                           rolling_avg,
                                           theoretical_max_value,
-                                          self.sampling_rate,
-                                          self.decimated_sampling_rate)
+                                          config.sampling_rate,
+                                          config.decimated_sampling_rate)
 
     def start(self):
         sampler_thread = threading.Thread(target=self.data_sampler.run)
@@ -290,7 +336,7 @@ class SeismLogger(object):
         sampler_thread.start()
 
 
-def create_web_api_socket(on_open):
+def create_web_api_socket(seismometer_id, on_open):
     def on_message(self, ws, message):
         print(message)
 
@@ -301,7 +347,7 @@ def create_web_api_socket(on_open):
         print("### closed ###")
 
     web_socket_url = "wss://" + \
-        os.environ.get('API_ENDPOINT') + "/ws/data-logger?seismometer_id=lehman"
+        os.environ.get('API_ENDPOINT') + "/ws/data-logger?seismometer_id=" + seismometer_id
     auth_token = os.environ.get('AUTH_TOKEN')
     ws = websocket.WebSocketApp(web_socket_url,
                                 header=["Authorization:" + auth_token],
@@ -312,12 +358,15 @@ def create_web_api_socket(on_open):
     return ws
 
 
-def start_seism_logger():
+def start_seism_logger(seismometer_id):
+    config = SeismometerConfig(seismometer_id)
+    print("starting", '\'' + seismometer_id + '\'')
     def on_websocket_open(ws):
-        seism_logger = SeismLogger(ws)
+        print("websocket open")
+        seism_logger = SeismLogger(config, ws)
         seism_logger.start()
 
-    ws = create_web_api_socket(on_websocket_open)
+    ws = create_web_api_socket(seismometer_id, on_websocket_open)
     ws.run_forever()
 
 
@@ -328,4 +377,8 @@ if __name__ == "__main__":
     if 'AUTH_TOKEN' not in os.environ:
         print("No AUTH_TOKEN defined as env var")
     else:
-        start_seism_logger()
+        seismometer_id = sys.argv[1]
+        if seismometer_id in SEISMOMETER_IDS:
+            start_seism_logger(seismometer_id)
+        else:
+            print("Invalid seismometer_id:", seismometer_id)
