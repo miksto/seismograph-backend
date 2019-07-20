@@ -4,3 +4,4 @@ files
 .vscode
 *.pyc
 .env
+nginx/www
