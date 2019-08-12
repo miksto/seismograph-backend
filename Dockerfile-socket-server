@@ -4,10 +4,11 @@ FROM python:3.6-stretch
 WORKDIR /home/app
 
 RUN pip install --upgrade pip
-RUN pip install numpy
-RUN pip install obspy
-RUN pip install matplotlib
-RUN pip install websockets
+
+RUN pip install pipenv
+COPY Pipfile ./
+COPY Pipfile.lock ./
+RUN pipenv install --deploy --ignore-pipfile
 
 # Bundle app source
 COPY python-server.py ./
@@ -15,4 +16,4 @@ COPY stream_plotter.py ./
 COPY stream_manager.py ./
 COPY seismometer.py ./
 
-CMD [ "python", "-u", "python-server.py" ]
+CMD ["pipenv", "run", "python", "-u", "python-server.py" ]
