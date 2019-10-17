@@ -57,6 +57,7 @@ class StreamPlotter:
       cat += StreamPlotter.get_global_earthquakes(client, starttime, endtime)
         
       stream.plot(
+        title=starttime.datetime,
         size=IMAGE_SIZE_DAY_PLOT,
         dpi=OUTFILE_DPI,
         type="dayplot", 
