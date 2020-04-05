@@ -30,6 +30,21 @@ class StreamPlotter:
     except Exception as e:
       print(e)
       return Catalog()
+
+  @staticmethod
+  def get_sweden_earthquakes(client, starttime, endtime):
+    try:
+      return client.get_events(
+                      starttime=starttime,
+                      endtime=endtime,
+                      latitude=59.334591,
+                      longitude=18.063240,
+                      maxradius=15,
+                      maxmagnitude=6
+                      )
+    except Exception as e:
+      print(e)
+      return Catalog()
   
   @staticmethod
   def get_global_earthquakes(client, starttime, endtime):
@@ -53,7 +68,7 @@ class StreamPlotter:
 
     try:
       client = Client("IRIS")
-      cat = StreamPlotter.get_japan_earthquakes(client, starttime, endtime)
+      cat = StreamPlotter.get_sweden_earthquakes(client, starttime, endtime)
       cat += StreamPlotter.get_global_earthquakes(client, starttime, endtime)
         
       stream.plot(
