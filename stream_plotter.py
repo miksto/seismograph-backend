@@ -3,7 +3,6 @@ from obspy import UTCDateTime, read, Trace, Stream, Catalog
 from obspy.clients.fdsn import Client
 
 import matplotlib
-matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 IMAGE_DIRECTORY = 'files/images'
 IMAGE_FILE_FORMAT = '.png'
