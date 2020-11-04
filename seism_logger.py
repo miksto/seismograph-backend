@@ -21,14 +21,6 @@ SEISMOMETER_IDS = [SEISMOMETER_ID_LEHMAN, SEISMOMETER_ID_VERTICAL_PENDULUM]
 class AdcConfig(object):
     def __init__(self, seismometer_id):
         if seismometer_id == SEISMOMETER_ID_LEHMAN: 
-            self.bias_point_channel = 5
-            self.coil_input_channel = 2
-            self.adc_bit_resolution = 12
-            self.CLK = 18
-            self.MISO = 23
-            self.MOSI = 24
-            self.CS = 25
-        elif seismometer_id == SEISMOMETER_ID_VERTICAL_PENDULUM:
             self.bias_point_channel = None
             self.coil_input_channel = 7
             self.adc_bit_resolution = 10
@@ -36,21 +28,29 @@ class AdcConfig(object):
             self.MISO = 16
             self.MOSI = 20
             self.CS = 21
+        elif seismometer_id == SEISMOMETER_ID_VERTICAL_PENDULUM:
+            self.bias_point_channel = 5
+            self.coil_input_channel = 2
+            self.adc_bit_resolution = 12
+            self.CLK = 18
+            self.MISO = 23
+            self.MOSI = 24
+            self.CS = 25
         else:
             raise print("Invalid seismometer_id provided to AdcConfig")
 
 class SeismometerConfig(object):
     def __init__(self, seismometer_id):
         self.sampling_rate = 750
-        self.decimated_sampling_rate = 15
+        self.decimated_sampling_rate = 30
         self.scale_factor = 8
-        self.upload_interval = 10
+        self.upload_interval = 4
         self.rolling_average_size = 5 * 60 / self.upload_interval  # 5 minutes rolling average
         self.filter_values = True
+        self.filter_cutoff_freq = 6
         self.use_rolling_avg = True
         self.chunk_size = self.sampling_rate * self.upload_interval
         self.adc_config = AdcConfig(seismometer_id)
-        self.filter_cutoff_freq = 2
 
 class MCP3208(Adafruit_MCP3008.MCP3008):
     # Modification to support the 12 bits ADC
@@ -90,11 +90,19 @@ class AdcWrapper(object):
     def supports_bias_point_measurement(self):
         return self.config.bias_point_channel is not None
 
+    def read_adc(self, channel):
+        value = self.adc.read_adc(channel)
+        if value == 0 or value == 2**self.config.adc_bit_resolution-1:
+           print("Read invalid value:", value)
+           return -1
+        else:
+           return value
+
     def read_coil(self):
-        return self.adc.read_adc(self.config.coil_input_channel)
+        return self.read_adc(self.config.coil_input_channel)
 
     def read_bias_point(self):
-        return self.adc.read_adc(self.config.bias_point_channel)
+        return self.read_adc(self.config.bias_point_channel)
 
 class DataFilter(object):
     def __init__(self, filter_cutoff_freq, sampling_rate):
@@ -218,7 +226,8 @@ class DataSampler(object):
 
         while not self.data_box.is_full():
             value = self.adc.read_coil() * self.scale_factor
-            self.data_box.add(value)
+            if value > 0:
+                self.data_box.add(value)
 
             if not self.data_box.is_full():
                 time.sleep(self.sleep_time)
