@@ -30,7 +30,7 @@ class AdcConfig(object):
             self.CS = 21
         elif seismometer_id == SEISMOMETER_ID_VERTICAL_PENDULUM:
             self.bias_point_channel = None
-            self.coil_input_channel = 1
+            self.coil_input_channel = 0
             self.adc_bit_resolution = 12
             self.CLK = 18
             self.MISO = 23
