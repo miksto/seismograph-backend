@@ -29,8 +29,8 @@ class AdcConfig(object):
             self.MOSI = 20
             self.CS = 21
         elif seismometer_id == SEISMOMETER_ID_VERTICAL_PENDULUM:
-            self.bias_point_channel = 5
-            self.coil_input_channel = 2
+            self.bias_point_channel = None
+            self.coil_input_channel = 1
             self.adc_bit_resolution = 12
             self.CLK = 18
             self.MISO = 23
@@ -48,7 +48,7 @@ class SeismometerConfig(object):
         self.rolling_average_size = 5 * 60 / self.upload_interval  # 5 minutes rolling average
         self.filter_values = True
         self.filter_cutoff_freq = 6
-        self.use_rolling_avg = True
+        self.use_rolling_avg = False
         self.chunk_size = self.sampling_rate * self.upload_interval
         self.adc_config = AdcConfig(seismometer_id)
 
@@ -346,13 +346,13 @@ class SeismLogger(object):
 
 
 def create_web_api_socket(seismometer_id, on_open):
-    def on_message(self, ws, message):
+    def on_message(ws, message):
         print(message)
 
-    def on_error(self, ws, error):
+    def on_error(ws, error):
         print(error)
 
-    def on_close(self, ws):
+    def on_close(ws, close_status_code, close_msg):
         print("### closed ###")
 
     web_socket_url = "wss://" + \

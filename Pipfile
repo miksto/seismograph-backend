@@ -10,6 +10,4 @@ numpy = "*"
 obspy = "*"
 matplotlib = "*"
 websockets = "*"
-
-[requires]
-python_version = "3.7"
+websocket-client = "*"

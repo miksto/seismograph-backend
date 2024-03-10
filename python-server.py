@@ -56,7 +56,6 @@ class SeismoServer:
   async def handle_data(self, seismometer_id, data):
     values = data['values']
     stats = data['stats']
-
     seismometer = self.seismometers[seismometer_id]
     await seismometer.handle_data(values, stats)
     await self.publish_data_to_webclients(seismometer_id, values, stats)
