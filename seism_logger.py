@@ -1,7 +1,6 @@
 import datetime
 import json
 import os
-import random
 import sys
 import threading
 import time
@@ -18,9 +17,10 @@ SEISMOMETER_ID_LEHMAN = 'lehman'
 SEISMOMETER_ID_VERTICAL_PENDULUM = 'vertical_pendulum'
 SEISMOMETER_IDS = [SEISMOMETER_ID_LEHMAN, SEISMOMETER_ID_VERTICAL_PENDULUM]
 
+
 class AdcConfig(object):
     def __init__(self, seismometer_id):
-        if seismometer_id == SEISMOMETER_ID_LEHMAN: 
+        if seismometer_id == SEISMOMETER_ID_LEHMAN:
             self.bias_point_channel = None
             self.coil_input_channel = 7
             self.adc_bit_resolution = 10
@@ -39,6 +39,7 @@ class AdcConfig(object):
         else:
             raise print("Invalid seismometer_id provided to AdcConfig")
 
+
 class SeismometerConfig(object):
     def __init__(self, seismometer_id):
         self.sampling_rate = 750
@@ -52,6 +53,7 @@ class SeismometerConfig(object):
         self.chunk_size = self.sampling_rate * self.upload_interval
         self.adc_config = AdcConfig(seismometer_id)
 
+
 class MCP3208(Adafruit_MCP3008.MCP3008):
     # Modification to support the 12 bits ADC
     def read_adc(self, adc_number):
@@ -61,7 +63,7 @@ class MCP3208(Adafruit_MCP3008.MCP3008):
         assert 0 <= adc_number <= 7, 'ADC number must be a value of 0-7!'
         # Build a single channel read command.
         # For example channel zero = 0b11000000
-        command = 0b11 << 6                  # Start bit, single channel read
+        command = 0b11 << 6  # Start bit, single channel read
         command |= (adc_number & 0x07) << 3  # Channel number (in 3 bits)
         # Note the bottom 3 bits of command are 0, this is to account for the
         # extra clock to do the conversion, and the low null bit returned at
@@ -69,7 +71,7 @@ class MCP3208(Adafruit_MCP3008.MCP3008):
         resp = self._spi.transfer([command, 0x0, 0x0])
         # Parse out the 12 bits of response data and return it.
         result = (resp[0] & 0x01) << 11  # only B11 is here
-        result |= resp[1] << 3           # B10:B3
+        result |= resp[1] << 3  # B10:B3
         # MSB has B2:B0 ... need to move down to LSB
         result |= resp[2] >> 5
         return (result & 0x0FFF)  # ensure we are only sending 12b
@@ -92,17 +94,18 @@ class AdcWrapper(object):
 
     def read_adc(self, channel):
         value = self.adc.read_adc(channel)
-        if value == 0 or value == 2**self.config.adc_bit_resolution-1:
-           print("Read invalid value:", value)
-           return -1
+        if value == 0 or value == 2 ** self.config.adc_bit_resolution - 1:
+            print("Read invalid value:", value)
+            return -1
         else:
-           return value
+            return value
 
     def read_coil(self):
         return self.read_adc(self.config.coil_input_channel)
 
     def read_bias_point(self):
         return self.read_adc(self.config.bias_point_channel)
+
 
 class DataFilter(object):
     def __init__(self, filter_cutoff_freq, sampling_rate):
@@ -149,7 +152,7 @@ class RollingAverage(object):
             val_sum = 0
             weight_sum = 0
             for id, val in enumerate(self._avg_list, start=2):
-                weight = 1/id
+                weight = 1 / id
                 val_sum += weight * val
                 weight_sum += weight
 
@@ -215,7 +218,7 @@ class DataSampler(object):
     def __init__(self, adc, condition, data_box, scale_factor, sampling_rate, upload_interval):
         self.condition = condition
         self.target_sampling_rate = sampling_rate
-        self.sleep_time = 1/(sampling_rate/0.5)
+        self.sleep_time = 1 / (sampling_rate / 0.5)
         self.adc = adc
         self.data_box = data_box
         self.scale_factor = scale_factor
@@ -235,7 +238,7 @@ class DataSampler(object):
     def _adjust_sleep_time(self, time_diff):
         actual_sampling_rate = self.data_box.max_size / (time_diff)
         sampling_rate_error_fraction = actual_sampling_rate / self.target_sampling_rate
-        self.sleep_time = (self.sleep_time + (self.sleep_time * sampling_rate_error_fraction))/2
+        self.sleep_time = (self.sleep_time + (self.sleep_time * sampling_rate_error_fraction)) / 2
         self.data_box.actual_sampling_rate = actual_sampling_rate
 
     def run(self):
@@ -247,12 +250,14 @@ class DataSampler(object):
                 t1 = time.time()
                 self.fill_data_box()
                 t2 = time.time()
-                self._adjust_sleep_time(t2-t1)
+                self._adjust_sleep_time(t2 - t1)
                 self.condition.notify()
 
 
 class DataUploader(object):
-    def __init__(self, ws, condition, data_box, data_processor, rolling_avg, theoretical_max_value, target_sampling_rate, decimated_sampling_rate):
+    def __init__(self, ws, condition, data_box, data_processor, rolling_avg, theoretical_max_value,
+                 target_sampling_rate,
+                 decimated_sampling_rate):
         self.ws = ws
         self.condition = condition
         self.data_box = data_box
@@ -306,9 +311,9 @@ class SeismLogger(object):
         condition = threading.Condition()
         data_box = DataBox(config.chunk_size)
         rolling_avg = RollingAverage(config.rolling_average_size)
-        theoretical_max_value = 2**config.adc_config.adc_bit_resolution * config.scale_factor
+        theoretical_max_value = 2 ** config.adc_config.adc_bit_resolution * config.scale_factor
         adc = AdcWrapper(config.adc_config)
-        
+
         if config.filter_values:
             data_filter = DataFilter(config.filter_cutoff_freq, config.sampling_rate)
         else:
@@ -356,7 +361,7 @@ def create_web_api_socket(seismometer_id, on_open):
         print("### closed ###")
 
     web_socket_url = "wss://" + \
-        os.environ.get('API_ENDPOINT') + "/ws/data-logger?seismometer_id=" + seismometer_id
+                     os.environ.get('API_ENDPOINT') + "/ws/data-logger?seismometer_id=" + seismometer_id
     auth_token = os.environ.get('AUTH_TOKEN')
     ws = websocket.WebSocketApp(web_socket_url,
                                 header=["Authorization:" + auth_token],
@@ -370,6 +375,7 @@ def create_web_api_socket(seismometer_id, on_open):
 def start_seism_logger(seismometer_id):
     config = SeismometerConfig(seismometer_id)
     print("starting", '\'' + seismometer_id + '\'')
+
     def on_websocket_open(ws):
         print("websocket open")
         seism_logger = SeismLogger(config, ws)
