@@ -1,0 +1,16 @@
+[Unit]
+Description=Seismometer logger
+After=network.target seismometer-server.service
+Requires=seismometer-server.service
+
+[Service]
+Environment="API_ENDPOINT=localhost:3000"
+Environment="AUTH_TOKEN={VALUE}"
+ExecStart=/usr/bin/python3 ~/seismograph-backend/start_logger.py vertical_pendulum
+WorkingDirectory=~/seismograph-backend
+Restart=always
+User={USER}
+Group={GROUP}
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Seismometer server
+After=network.target
+
+[Service]
+Environment="AUTH_TOKEN={VALUE}"
+ExecStart=/usr/bin/python3 ~/seismograph-backend/start_server.py
+WorkingDirectory=~/seismograph-backend
+Restart=always
+User={USER}
+Group={GROUP}
+
+[Install]
+WantedBy=multi-user.target
