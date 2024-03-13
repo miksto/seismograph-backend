@@ -1,4 +1,6 @@
-from obspy import Catalog
+from pathlib import Path
+
+from obspy import Catalog, Stream, UTCDateTime
 from obspy.clients.fdsn import Client
 
 IMAGE_DIRECTORY = 'files/images'
@@ -9,12 +11,13 @@ OUTFILE_DPI = 150
 
 
 class StreamPlotter:
+    directory: Path
 
-    def __init__(self, directory):
+    def __init__(self, directory: Path):
         self.directory = directory
 
     @staticmethod
-    def get_japan_earthquakes(client, starttime, endtime):
+    def get_japan_earthquakes(client: Client, starttime: UTCDateTime, endtime: UTCDateTime) -> Catalog:
         try:
             return client.get_events(
                 starttime=starttime,
@@ -29,7 +32,7 @@ class StreamPlotter:
             return Catalog()
 
     @staticmethod
-    def get_sweden_earthquakes(client, starttime, endtime):
+    def get_sweden_earthquakes(client: Client, starttime: UTCDateTime, endtime: UTCDateTime) -> Catalog:
         try:
             return client.get_events(
                 starttime=starttime,
@@ -44,7 +47,7 @@ class StreamPlotter:
             return Catalog()
 
     @staticmethod
-    def get_global_earthquakes(client, starttime, endtime):
+    def get_global_earthquakes(client: Client, starttime: UTCDateTime, endtime: UTCDateTime) -> Catalog:
         try:
             return client.get_events(
                 starttime=starttime,
@@ -55,7 +58,7 @@ class StreamPlotter:
             print(e)
             return Catalog()
 
-    async def save_day_plot(self, stream):
+    async def save_day_plot(self, stream: Stream) -> None:
         starttime = stream[0].stats.starttime
         endtime = stream[0].stats.endtime
         print("Plotting day plot for stream with starttime:", starttime)
@@ -79,7 +82,7 @@ class StreamPlotter:
         except Exception as e:
             print("Failed to plot day plot.", e)
 
-    async def save_hour_plot(self, stream, hour):
+    async def save_hour_plot(self, stream: Stream, hour: int) -> None:
         image_file_name = 'hour_' + str(hour) + IMAGE_FILE_FORMAT
         image_file_path = self.directory / image_file_name
         endtime = stream[0].stats.endtime
@@ -90,7 +93,7 @@ class StreamPlotter:
             starttime=(endtime - 60 * 60),
             endtime=endtime)
 
-    async def save_last_10_minutes_plot(self, stream):
+    async def save_last_10_minutes_plot(self, stream: Stream) -> None:
         # Always create latest.png from last minute
         image_file_name = 'last_10_minutes' + IMAGE_FILE_FORMAT
         image_file_path = self.directory / image_file_name
@@ -103,7 +106,7 @@ class StreamPlotter:
             starttime=starttime,
             endtime=endtime)
 
-    async def save_last_60_minutes_plot(self, stream):
+    async def save_last_60_minutes_plot(self, stream: Stream) -> None:
         # Always create latest.png from last minute
         image_file_name = 'last_60_minutes' + IMAGE_FILE_FORMAT
         image_file_path = self.directory / image_file_name

@@ -3,6 +3,7 @@ import json
 import os
 from http import HTTPStatus
 from pathlib import Path
+from typing import List, Dict, Any, Set
 from urllib.parse import urlparse, parse_qs
 
 import websockets
@@ -37,11 +38,11 @@ class AuthenticatingWebSocket(WebSocketServerProtocol):
         return None
 
 
-class SeismoServer:
-    seismometers = {}
-    web_clients = {}
+class ServerRequestHandler:
+    seismometers: Dict[str, Seismometer] = {}
+    web_clients: Dict[str, Set[WebSocketServerProtocol]] = {}
 
-    def start_server(self):
+    def start_server(self) -> None:
         for seismometer_id in SEISMOMETER_IDS:
             seismometer = Seismometer(seismometer_id, Path('files/' + seismometer_id))
             seismometer.create_folders()
@@ -51,14 +52,14 @@ class SeismoServer:
         asyncio.get_event_loop().run_until_complete(start_server)
         asyncio.get_event_loop().run_forever()
 
-    async def handle_data(self, seismometer_id, data):
-        values = data['values']
-        stats = data['stats']
+    async def handle_data(self, seismometer_id: str, data: Dict[str, Any]) -> None:
+        values: List[int] = data['values']
+        stats: Dict[str, Any] = data['stats']
         seismometer = self.seismometers[seismometer_id]
         await seismometer.handle_data(values, stats)
         await self.publish_data_to_webclients(seismometer_id, values, stats)
 
-    def register_web_client(self, seismometer_id, websocket):
+    def register_web_client(self, seismometer_id: str, websocket: WebSocketServerProtocol) -> None:
         print("Registering client")
 
         if not seismometer_id in self.web_clients.keys():
@@ -66,12 +67,12 @@ class SeismoServer:
 
         self.web_clients[seismometer_id].add(websocket)
 
-    def unregister_web_client(self, seismometer_id, websocket):
+    def unregister_web_client(self, seismometer_id: str, websocket: WebSocketServerProtocol) -> None:
         print("Unregistering client")
         if seismometer_id in self.web_clients.keys():
             self.web_clients[seismometer_id].remove(websocket)
 
-    async def publish_data_to_webclients(self, seismometer_id, values, stats):
+    async def publish_data_to_webclients(self, seismometer_id: str, values: List, stats: Dict[str, Any]) -> None:
         if seismometer_id not in self.web_clients.keys():
             return
 
@@ -90,7 +91,8 @@ class SeismoServer:
         for client in old_connections:
             self.unregister_web_client(seismometer_id, client)
 
-    async def send_history(self, seismometer_id, websocket, history_length=30):
+    async def send_history(self, seismometer_id: str, websocket: WebSocketServerProtocol,
+                           history_length: int = 30) -> None:
         seismometer = self.seismometers[seismometer_id]
         data_list = await seismometer.get_last_seconds_of_data(history_length)
         message = json.dumps({
@@ -100,7 +102,7 @@ class SeismoServer:
         })
         await websocket.send(message)
 
-    async def socket_handler(self, websocket, path):
+    async def socket_handler(self, websocket: WebSocketServerProtocol, path: str) -> None:
         parsed_url = urlparse(path)
         query_params = parse_qs(parsed_url.query)
         seismometer_id = query_params[WS_SEISMOMETER_QUERY_PARAM][0]
@@ -114,13 +116,7 @@ class SeismoServer:
                 message = await websocket.recv()
         elif parsed_url.path == WS_DATA_LOGGER_PATH:
             async for message in websocket:
-                json_data = json.loads(message)
+                json_data: Dict[str, Any] = json.loads(message)
                 await self.handle_data(seismometer_id, json_data)
         else:
             print("Invalid path", path)
-
-
-if 'AUTH_TOKEN' not in os.environ:
-    print("Missing AUTH_TOKEN as environment variable")
-else:
-    SeismoServer().start_server()

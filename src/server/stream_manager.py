@@ -1,23 +1,26 @@
 import datetime
+from pathlib import Path
+from typing import Optional, List
 
 import numpy
+from numpy.typing import NDArray
 from obspy import UTCDateTime, read, Trace, Stream
 
 
 class StreamManager:
-    wrapped_stream = None
+    wrapped_stream: Optional[Stream] = None
 
-    def __init__(self, directory):
+    def __init__(self, directory: Path):
         self.directory = directory
 
     @staticmethod
-    def _is_stream_valid_for_current_date(stream):
+    def _is_stream_valid_for_current_date(stream) -> bool:
         current_date = datetime.datetime.today().date()
         stream_start_date = stream[0].stats.starttime.datetime.date()
         return stream_start_date == current_date
 
     @staticmethod
-    def _create_new_stream():
+    def _create_new_stream() -> Stream:
         data = numpy.array([], dtype='int16')
         stats = {'network': 'BW', 'station': 'MIK', 'location': '',
                  'channel': 'Z', 'npts': len(data), 'sampling_rate': 10,
@@ -28,18 +31,18 @@ class StreamManager:
         stream = Stream([Trace(data=data, header=stats)])
         return stream
 
-    def _stream_file_path(self, date):
+    def _stream_file_path(self, date) -> Path:
         file_name = 'day_' + str(date.day) + '.mseed'
         return self.directory / file_name
 
-    async def get_wrapped_stream(self):
+    async def get_wrapped_stream(self) -> Stream:
         if self.wrapped_stream is None:
             await self._init_wrapped_stream()
         return self.wrapped_stream
 
-    async def append_values(self, values):
+    async def append_values(self, values: List[int]) -> None:
         stream = await self.get_wrapped_stream()
-        data = numpy.array(values, dtype='int16')
+        data: NDArray = numpy.array(values, dtype='int16')
         stream[0].data = numpy.append(stream[0].data, data)
 
         # Update sample rate
@@ -47,7 +50,7 @@ class StreamManager:
         sampling_rate = stream[0].stats.npts / time_delta
         stream[0].stats.sampling_rate = sampling_rate
 
-    async def _init_wrapped_stream(self):
+    async def _init_wrapped_stream(self) -> None:
         current_date = datetime.datetime.today().date()
         file_path = self._stream_file_path(current_date)
 
@@ -63,13 +66,13 @@ class StreamManager:
         if self.wrapped_stream is None:
             self.wrapped_stream = StreamManager._create_new_stream()
 
-    def is_valid_for_current_date(self):
+    def is_valid_for_current_date(self) -> bool:
         return StreamManager._is_stream_valid_for_current_date(self.wrapped_stream)
 
-    async def save_to_file(self):
+    async def save_to_file(self) -> None:
         stream_start_date = self.wrapped_stream[0].stats.starttime.datetime.date()
         file_name = self._stream_file_path(stream_start_date)
         self.wrapped_stream.write(file_name)
 
-    def begin_new_stream(self):
+    def begin_new_stream(self) -> None:
         self.wrapped_stream = StreamManager._create_new_stream()
