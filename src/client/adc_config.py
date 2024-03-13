@@ -4,6 +4,7 @@ from src.shared.Constants import SEISMOMETER_ID_LEHMAN, SEISMOMETER_ID_VERTICAL_
 
 
 class AdcConfig(object):
+    mock_adc: bool
     bias_point_channel: Optional[int]
     coil_input_channel: int
     adc_bit_resolution: int
@@ -12,7 +13,8 @@ class AdcConfig(object):
     MOSI: int
     CS: int
 
-    def __init__(self, seismometer_id: str):
+    def __init__(self, seismometer_id: str, mock_adc: bool):
+        self.mock_adc = mock_adc
         if seismometer_id == SEISMOMETER_ID_LEHMAN:
             self.bias_point_channel = None
             self.coil_input_channel = 7

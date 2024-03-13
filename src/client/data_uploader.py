@@ -68,7 +68,7 @@ class DataUploader(object):
                 if not self.data_box.is_full():
                     self.condition.wait()
 
-                values: NDArray = self.data_box.get_values()
+                values: NDArray[int] = self.data_box.get_values()
                 bias_point = self.data_box.bias_point
                 actual_sampling_rate = self.data_box.actual_sampling_rate
 

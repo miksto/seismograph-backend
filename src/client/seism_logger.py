@@ -24,7 +24,7 @@ class SeismometerConfig(object):
     chunk_size: int
     adc_config: AdcConfig
 
-    def __init__(self, seismometer_id: str):
+    def __init__(self, seismometer_id: str, mock_adc: bool):
         self.sampling_rate = 750
         self.decimated_sampling_rate = 30
         self.scale_factor = 8
@@ -34,7 +34,7 @@ class SeismometerConfig(object):
         self.filter_cutoff_freq = 6
         self.use_rolling_avg = False
         self.chunk_size = self.sampling_rate * self.upload_interval
-        self.adc_config = AdcConfig(seismometer_id)
+        self.adc_config = AdcConfig(seismometer_id, mock_adc)
 
 
 class SeismLogger(object):

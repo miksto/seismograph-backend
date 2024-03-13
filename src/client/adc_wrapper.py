@@ -4,12 +4,22 @@ from src.client.adc_config import AdcConfig
 from src.client.mcp3208 import MCP3208
 
 
+class MockAdc(object):
+
+    def read_adc(self, channel: int): return 1
+
+
 class AdcWrapper(object):
     config: AdcConfig
-    adc: Adafruit_MCP3008.MCP3008
+    adc: Adafruit_MCP3008.MCP3008 | MockAdc
 
     def __init__(self, config: AdcConfig):
         self.config = config
+
+        if config.mock_adc:
+            self.adc = MockAdc()
+            return
+
         if config.adc_bit_resolution == 12:
             self.adc = MCP3208(
                 clk=config.CLK,

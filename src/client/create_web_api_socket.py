@@ -28,8 +28,8 @@ def create_web_api_socket(seismometer_id: str, on_open: Optional[Callable[[WebSo
     return ws
 
 
-def start_websocket_and_logger(seismometer_id: str) -> None:
-    config = SeismometerConfig(seismometer_id)
+def start_websocket_and_logger(seismometer_id: str, mock_adc: bool) -> None:
+    config = SeismometerConfig(seismometer_id, mock_adc)
     print("starting", '\'' + seismometer_id + '\'')
 
     def on_websocket_open(ws):

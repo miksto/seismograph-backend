@@ -12,7 +12,8 @@ if __name__ == "__main__":
         print("No AUTH_TOKEN defined as env var")
     else:
         seismometer_id = sys.argv[1]
+        mock_adc = len(sys.argv) > 2 and sys.argv[2] == '--mock-adc'
         if seismometer_id in SEISMOMETER_IDS:
-            start_websocket_and_logger(seismometer_id)
+            start_websocket_and_logger(seismometer_id, mock_adc)
         else:
             print("Invalid seismometer_id:", seismometer_id)
