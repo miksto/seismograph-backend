@@ -1,12 +1,10 @@
 import os
-import sys
 from typing import Optional, Callable, Any
 
 import websocket
 from websocket import WebSocketApp, WebSocket
 
 from src.client.seism_logger import SeismometerConfig, SeismLogger
-from src.shared.Constants import SEISMOMETER_IDS
 
 
 def create_web_api_socket(seismometer_id: str, on_open: Optional[Callable[[WebSocket], None]]) -> WebSocketApp:
@@ -19,7 +17,7 @@ def create_web_api_socket(seismometer_id: str, on_open: Optional[Callable[[WebSo
     def on_close(ws: WebSocket, close_status_code: Any, close_msg: Any):
         print("### closed ###")
 
-    web_socket_url = "wss://" + os.environ.get('API_ENDPOINT') + "/ws/data-logger?seismometer_id=" + seismometer_id
+    web_socket_url = "ws://" + os.environ.get('API_ENDPOINT') + "/ws/data-logger?seismometer_id=" + seismometer_id
     auth_token = os.environ.get('AUTH_TOKEN')
     ws = websocket.WebSocketApp(web_socket_url,
                                 header=["Authorization:" + auth_token],
@@ -30,7 +28,7 @@ def create_web_api_socket(seismometer_id: str, on_open: Optional[Callable[[WebSo
     return ws
 
 
-def start_seism_logger(seismometer_id: str) -> None:
+def start_websocket_and_logger(seismometer_id: str) -> None:
     config = SeismometerConfig(seismometer_id)
     print("starting", '\'' + seismometer_id + '\'')
 
@@ -41,17 +39,3 @@ def start_seism_logger(seismometer_id: str) -> None:
 
     ws = create_web_api_socket(seismometer_id, on_websocket_open)
     ws.run_forever()
-
-
-if __name__ == "__main__":
-    # websocket.enableTrace(True)
-    if 'API_ENDPOINT' not in os.environ:
-        print("No API_ENDPOINT defined as env var")
-    if 'AUTH_TOKEN' not in os.environ:
-        print("No AUTH_TOKEN defined as env var")
-    else:
-        seismometer_id = sys.argv[1]
-        if seismometer_id in SEISMOMETER_IDS:
-            start_seism_logger(seismometer_id)
-        else:
-            print("Invalid seismometer_id:", seismometer_id)
