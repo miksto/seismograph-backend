@@ -5,30 +5,9 @@ services:
       context: ./
       dockerfile: Dockerfile-socket-server
     volumes:
-      - "./nginx/www:/home/app/files/"
+      - "./files:/home/app/files/"
     ports:
       - "3000"
     env_file:
       - .env
-    restart: on-failure
-
-  letsencrypt:
-    image: linuxserver/letsencrypt
-    container_name: letsencrypt
-    cap_add:
-      - NET_ADMIN
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Asia/Tokyo
-      - URL=stockman.se
-      - SUBDOMAINS=api.seismometer.micke,
-      - VALIDATION=http
-      - ONLY_SUBDOMAINS=true
-      - STAGING=false
-    volumes:
-      - ./nginx:/config
-    ports:
-      - 443:443
-      - 80:80
     restart: on-failure

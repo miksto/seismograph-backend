@@ -10,7 +10,7 @@ import websockets
 from websockets import ConnectionClosed
 from websockets.server import WebSocketServerProtocol
 
-from seismometer import Seismometer
+from src.server.seismometer import Seismometer
 from src.shared.Constants import SEISMOMETER_IDS
 
 WS_CLIENT_PATH = '/ws/web-client'

@@ -4,8 +4,8 @@ from typing import Any, Dict, List
 
 from obspy import Stream
 
-from stream_manager import StreamManager
-from stream_plotter import StreamPlotter
+from src.server.stream_manager import StreamManager
+from src.server.stream_plotter import StreamPlotter
 
 MSEED_FILES_DIRECTORY = 'mseed/'
 IMAGE_FILES_DIRECTORY = 'images/'

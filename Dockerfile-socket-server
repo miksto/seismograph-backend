@@ -1,4 +1,4 @@
-FROM python:3.7-stretch
+FROM python:3.9-bookworm
 
 # Create app directory
 WORKDIR /home/app
@@ -11,9 +11,7 @@ COPY Pipfile.lock ./
 RUN pipenv install --deploy --ignore-pipfile
 
 # Bundle app source
-COPY python-server.py ./
-COPY stream_plotter.py ./
-COPY stream_manager.py ./
-COPY seismometer.py ./
+COPY src src
+COPY start_server.py ./
 
-CMD ["pipenv", "run", "python", "-u", "python-server.py" ]
+CMD ["pipenv", "run", "python", "-u", "start_server.py" ]
