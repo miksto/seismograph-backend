@@ -1,25 +1,31 @@
-class RollingAverage(object):
-    _avg_list = []
+from typing import List
 
-    def __init__(self, max_size):
+from numpy.typing import NDArray
+
+
+class RollingAverage(object):
+    _avg_list: List = []
+    max_size: int
+
+    def __init__(self, max_size: int):
         self.max_size = max_size
 
-    def _trim_size(self):
+    def _trim_size(self) -> None:
         if len(self._avg_list) > self.max_size:
             self._avg_list.pop()
 
-    def _add(self, value):
+    def _add(self, value) -> None:
         self._avg_list.insert(0, value)
         self._trim_size()
 
-    def add_batch(self, values):
+    def add_batch(self, values: NDArray[int]) -> None:
         avg = sum(values) / len(values)
         self._add(avg)
 
-    def is_empty(self):
+    def is_empty(self) -> bool:
         return not self._avg_list
 
-    def get_average(self):
+    def get_average(self) -> float:
         current_size = len(self._avg_list)
         if current_size > 0:
             val_sum = 0

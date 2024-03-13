@@ -1,8 +1,18 @@
+from typing import Optional
+
 from src.shared.Constants import SEISMOMETER_ID_LEHMAN, SEISMOMETER_ID_VERTICAL_PENDULUM
 
 
 class AdcConfig(object):
-    def __init__(self, seismometer_id):
+    bias_point_channel: Optional[int]
+    coil_input_channel: int
+    adc_bit_resolution: int
+    CLK: int
+    MISO: int
+    MOSI: int
+    CS: int
+
+    def __init__(self, seismometer_id: str):
         if seismometer_id == SEISMOMETER_ID_LEHMAN:
             self.bias_point_channel = None
             self.coil_input_channel = 7
