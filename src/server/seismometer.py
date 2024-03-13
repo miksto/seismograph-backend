@@ -1,9 +1,8 @@
-from pathlib import Path
 from datetime import datetime
-from stream_plotter import StreamPlotter
-from stream_manager import StreamManager
 
-SEISMOMETER_IDS = ['lehman', 'vertical_pendulum']
+from stream_manager import StreamManager
+from stream_plotter import StreamPlotter
+
 MSEED_FILES_DIRECTORY = 'mseed/'
 IMAGE_FILES_DIRECTORY = 'images/'
 

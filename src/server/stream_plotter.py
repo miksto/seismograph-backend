@@ -1,9 +1,5 @@
-import os
-from obspy import UTCDateTime, read, Trace, Stream, Catalog
+from obspy import Catalog
 from obspy.clients.fdsn import Client
-
-import matplotlib
-import matplotlib.pyplot as plt
 
 IMAGE_DIRECTORY = 'files/images'
 IMAGE_FILE_FORMAT = '.png'

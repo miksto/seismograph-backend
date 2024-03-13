@@ -1,23 +1,21 @@
-import os
 import asyncio
-import websockets
-from pathlib import Path
+import json
+import os
 from http import HTTPStatus
+from pathlib import Path
 from urllib.parse import urlparse, parse_qs
+
+import websockets
 from websockets import ConnectionClosed
 from websockets.server import WebSocketServerProtocol
-from websockets.exceptions import InvalidHandshake
-import json
-import datetime
-from stream_plotter import StreamPlotter
-from stream_manager import StreamManager
-from seismometer import Seismometer, SEISMOMETER_IDS
+
+from seismometer import Seismometer
+from src.shared.Constants import SEISMOMETER_IDS
 
 WS_CLIENT_PATH = '/ws/web-client'
 WS_DATA_LOGGER_PATH = '/ws/data-logger'
 WS_SEISMOMETER_QUERY_PARAM = 'seismometer_id'
 WS_HISTORY_LENGTH_QUERY_PARAM = 'history_length'
-AUTH_TOKEN_HEADER = 'AUTH_TOKEN'
 
 
 class AuthenticatingWebSocket(WebSocketServerProtocol):
@@ -33,7 +31,7 @@ class AuthenticatingWebSocket(WebSocketServerProtocol):
             return HTTPStatus.NOT_FOUND, []
 
         if parsed_url.path == WS_DATA_LOGGER_PATH and \
-                not request_headers['Authorization'] == os.environ.get(AUTH_TOKEN_HEADER):
+                not request_headers['Authorization'] == os.environ.get('AUTH_TOKEN'):
             return HTTPStatus.UNAUTHORIZED, []
 
         return None

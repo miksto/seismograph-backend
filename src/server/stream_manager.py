@@ -1,4 +1,5 @@
 import datetime
+
 import numpy
 from obspy import UTCDateTime, read, Trace, Stream
 
