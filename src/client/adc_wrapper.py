@@ -1,3 +1,5 @@
+from typing import Union
+
 import Adafruit_MCP3008
 
 from src.client.adc_config import AdcConfig
@@ -11,7 +13,7 @@ class MockAdc(object):
 
 class AdcWrapper(object):
     config: AdcConfig
-    adc: Adafruit_MCP3008.MCP3008 | MockAdc
+    adc: Union[Adafruit_MCP3008.MCP3008, MockAdc]
 
     def __init__(self, config: AdcConfig):
         self.config = config
