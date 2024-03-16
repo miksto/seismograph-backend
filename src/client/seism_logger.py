@@ -6,6 +6,7 @@ from src.client.adc_config import AdcConfig
 from src.client.adc_wrapper import AdcWrapper
 from src.client.data_box import DataBox
 from src.client.data_filter import DataFilter
+from src.client.data_filter_config import DataFilterConfig
 from src.client.data_processor import DataProcessor
 from src.client.data_sampler import DataSampler
 from src.client.data_uploader import DataUploader
@@ -18,8 +19,7 @@ class SeismometerConfig(object):
     scale_factor: int
     upload_interval: int
     rolling_average_size: int
-    filter_values: bool
-    filter_cutoff_freq: int
+    filter_config: DataFilterConfig
     use_rolling_avg: bool
     chunk_size: int
     adc_config: AdcConfig
@@ -30,8 +30,12 @@ class SeismometerConfig(object):
         self.scale_factor = 8
         self.upload_interval = 4
         self.rolling_average_size = 5 * 60 // self.upload_interval  # 5 minutes rolling average
-        self.filter_values = True
-        self.filter_cutoff_freq = 6
+        self.filter_config = DataFilterConfig(
+            data_sampling_freq=self.sampling_rate,
+            filter_enabled=True,
+            filter_cutoff_freq=6,
+            filter_order=8
+        )
         self.use_rolling_avg = False
         self.chunk_size = self.sampling_rate * self.upload_interval
         self.adc_config = AdcConfig(seismometer_id, mock_adc)
@@ -45,8 +49,8 @@ class SeismLogger(object):
         theoretical_max_value: int = 2 ** config.adc_config.adc_bit_resolution * config.scale_factor
         adc = AdcWrapper(config.adc_config)
 
-        if config.filter_values:
-            data_filter = DataFilter(config.filter_cutoff_freq, config.sampling_rate)
+        if config.filter_config.filter_enabled:
+            data_filter = DataFilter(config.filter_config)
         else:
             data_filter = None
 
