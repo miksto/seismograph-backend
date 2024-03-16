@@ -42,7 +42,7 @@ class AdcWrapper(object):
     def supports_bias_point_measurement(self) -> bool:
         return self.config.bias_point_channel is not None
 
-    def read_adc(self, channel: int) -> int:
+    def _read_adc(self, channel: int) -> int:
         value = self.adc.read_adc(channel)
         if value == 0 or value == 2 ** self.config.adc_bit_resolution - 1:
             print("Read invalid value:", value)
@@ -51,7 +51,7 @@ class AdcWrapper(object):
             return value
 
     def read_coil(self) -> int:
-        return self.read_adc(self.config.coil_input_channel)
+        return self._read_adc(self.config.coil_input_channel)
 
     def read_bias_point(self) -> int:
-        return self.read_adc(self.config.bias_point_channel)
+        return self._read_adc(self.config.bias_point_channel)

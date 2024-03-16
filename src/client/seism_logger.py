@@ -1,3 +1,4 @@
+import queue
 import threading
 
 from websocket import WebSocketApp
@@ -14,7 +15,7 @@ from src.client.seismometer_config import SeismometerConfig
 
 class SeismLogger(object):
     def __init__(self, config: SeismometerConfig, ws: WebSocketApp):
-        condition = threading.Condition()
+        data_queue = queue.Queue()
         data_box = DataBox(config.chunk_size)
         rolling_avg = RollingAverage(config.rolling_average_size)
         theoretical_max_value: int = 2 ** config.adc_config.adc_bit_resolution * config.scale_factor
@@ -32,15 +33,13 @@ class SeismLogger(object):
                                        data_filter)
 
         self.data_sampler = DataSampler(adc,
-                                        condition,
+                                        data_queue,
                                         data_box,
                                         config.scale_factor,
-                                        config.sampling_rate,
-                                        config.upload_interval)
+                                        config.sampling_rate)
 
         self.data_uploader = DataUploader(ws,
-                                          condition,
-                                          data_box,
+                                          data_queue,
                                           data_processor,
                                           rolling_avg,
                                           theoretical_max_value,
@@ -48,9 +47,7 @@ class SeismLogger(object):
                                           config.decimated_sampling_rate)
 
     def start(self) -> None:
-        sampler_thread = threading.Thread(target=self.data_sampler.run)
-        uploader_thread = threading.Thread(target=self.data_uploader.run)
-        sampler_thread.daemon = True
-        uploader_thread.daemon = True
+        sampler_thread = threading.Thread(target=self.data_sampler.run, daemon=True)
+        uploader_thread = threading.Thread(target=self.data_uploader.run, daemon=True)
         uploader_thread.start()
         sampler_thread.start()
