@@ -1,3 +1,5 @@
+import datetime
+import math
 from typing import Union
 
 import Adafruit_MCP3008
@@ -8,7 +10,11 @@ from src.client.mcp3208 import MCP3208
 
 class MockAdc(object):
 
-    def read_adc(self, channel: int): return 1
+    def read_adc(self, channel: int):
+        now = datetime.datetime.now()
+        seconds_with_millis = now.minute * 60 + now.second + now.microsecond / 1_000_000.0
+        sine_value = math.sin(2*seconds_with_millis)
+        return sine_value * 100
 
 
 class AdcWrapper(object):
