@@ -5,7 +5,7 @@ from obspy.clients.fdsn import Client
 
 IMAGE_DIRECTORY = 'files/images'
 IMAGE_FILE_FORMAT = '.png'
-IMAGE_SIZE_HOURLY = (2560, 500)
+IMAGE_SIZE_HOURLY = (1280, 250)
 IMAGE_SIZE_DAY_PLOT = (2560, 1920)
 OUTFILE_DPI = 150
 
