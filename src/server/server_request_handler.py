@@ -56,8 +56,8 @@ class ServerRequestHandler:
         values: List[int] = data['values']
         stats: Dict[str, Any] = data['stats']
         seismometer = self.seismometers[seismometer_id]
-        await seismometer.handle_data(values, stats)
         await self.publish_data_to_webclients(seismometer_id, values, stats)
+        await seismometer.handle_data(values, stats)
 
     def register_web_client(self, seismometer_id: str, websocket: WebSocketServerProtocol) -> None:
         print("Registering client")
