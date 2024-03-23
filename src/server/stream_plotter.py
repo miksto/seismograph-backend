@@ -1,4 +1,3 @@
-from datetime import datetime
 from pathlib import Path
 
 from obspy import Catalog, Stream, UTCDateTime
@@ -59,6 +58,14 @@ class StreamPlotter:
             print(e)
             return Catalog()
 
+    @staticmethod
+    def get_plot_color(stream: Stream) -> str:
+        day_of_year = stream[0].stats.starttime.julday
+        if day_of_year % 2 == 0:
+            return "black"
+        else:
+            return "blue"
+
     async def save_day_plot(self, stream: Stream) -> None:
         starttime = stream[0].stats.starttime
         endtime = stream[0].stats.endtime
@@ -87,14 +94,9 @@ class StreamPlotter:
         image_file_name = 'hour_' + str(hour) + IMAGE_FILE_FORMAT
         image_file_path = self.directory / image_file_name
         endtime = stream[0].stats.endtime
-        day_of_year = datetime.now().timetuple().tm_yday
-        if day_of_year % 2 == 0:
-            color = "black"
-        else:
-            color = "blue"
 
         stream.plot(
-            color=color,
+            color=StreamPlotter.get_plot_color(stream),
             size=IMAGE_SIZE_HOURLY,
             dpi=OUTFILE_DPI,
             outfile=image_file_path,
@@ -108,6 +110,7 @@ class StreamPlotter:
         endtime = stream[0].stats.endtime
         starttime = (endtime - (10 * 60))
         stream.plot(
+            color=StreamPlotter.get_plot_color(stream),
             size=IMAGE_SIZE_HOURLY,
             dpi=OUTFILE_DPI,
             outfile=image_file_path,
@@ -121,6 +124,7 @@ class StreamPlotter:
         endtime = stream[0].stats.endtime
         starttime = (endtime - (60 * 60))
         stream.plot(
+            color=StreamPlotter.get_plot_color(stream),
             size=IMAGE_SIZE_HOURLY,
             dpi=OUTFILE_DPI,
             outfile=image_file_path,
