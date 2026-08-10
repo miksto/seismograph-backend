@@ -17,21 +17,6 @@ class StreamPlotter:
         self.directory = directory
 
     @staticmethod
-    def get_japan_earthquakes(client: Client, starttime: UTCDateTime, endtime: UTCDateTime) -> Catalog:
-        try:
-            return client.get_events(
-                starttime=starttime,
-                endtime=endtime,
-                latitude=35.6895,
-                longitude=139.6917,
-                maxradius=15,
-                maxmagnitude=6
-            )
-        except Exception as e:
-            print(e)
-            return Catalog()
-
-    @staticmethod
     def get_sweden_earthquakes(client: Client, starttime: UTCDateTime, endtime: UTCDateTime) -> Catalog:
         try:
             return client.get_events(
